@@ -26,7 +26,32 @@ import {
   CallSplit,
   Visibility,
   VisibilityOff,
+  AccountBalanceWallet,
+  Refresh,
 } from '@mui/icons-material';
+
+// Interfaces for Bitget API responses
+interface AccountData {
+  marginCoin: string;
+  locked: string;
+  available: string;
+  equity: string;
+  usdtEquity: string;
+  unrealizedPL: string | null;
+  crossRiskRate: string;
+}
+
+interface Position {
+  symbol: string;
+  marginCoin: string;
+  holdSide: string;
+  total: string;
+  available: string;
+  averageOpenPrice: string;
+  unrealizedPL: string;
+  leverage: number;
+  marketPrice: string;
+}
 
 // Symbol icons (using simple colored circles for crypto symbols)
 const SymbolIcon = ({ symbol }: { symbol: string }) => {
@@ -64,7 +89,8 @@ const SymbolIcon = ({ symbol }: { symbol: string }) => {
   );
 };
 
-interface Position {
+// Legacy interfaces for mock data - keeping for compatibility
+interface MockPosition {
   id: string;
   side: 'long' | 'short';
   size: number;
@@ -77,7 +103,7 @@ interface Account {
   name: string;
   apiKey: string;
   equity: number;
-  positions: Position[];
+  positions: MockPosition[];
 }
 
 interface PriceData {
@@ -95,6 +121,12 @@ function App() {
   const [wsConnected, setWsConnected] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Bitget account data
+  const [accountData, setAccountData] = useState<AccountData | null>(null);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [accountLoading, setAccountLoading] = useState(false);
+
   const [accounts, setAccounts] = useState<Account[]>([
     {
       id: '1',
@@ -189,6 +221,64 @@ function App() {
       setCurrentPrice(symbolPriceData.price);
     }
   }, [selectedSymbol, priceData]);
+
+  // Fetch account data from Bitget API
+  const fetchAccountData = async () => {
+    setAccountLoading(true);
+    try {
+      // For demo purposes, using mock data that matches Bitget API structure
+      // In real implementation, this would make authenticated API calls
+
+      // Mock account data based on Bitget API response format
+      const mockAccountData: AccountData = {
+        marginCoin: 'USDT',
+        locked: '150.25',
+        available: '2849.75',
+        equity: '3000.00',
+        usdtEquity: '3000.00',
+        unrealizedPL: '25.50',
+        crossRiskRate: '0.02',
+      };
+
+      // Mock positions data
+      const mockPositions: Position[] = [
+        {
+          symbol: 'BTCUSDT_UMCBL',
+          marginCoin: 'USDT',
+          holdSide: 'long',
+          total: '0.5',
+          available: '0.5',
+          averageOpenPrice: '65420.5',
+          unrealizedPL: '125.50',
+          leverage: 10,
+          marketPrice: '65671.0',
+        },
+        {
+          symbol: 'ETHUSDT_UMCBL',
+          marginCoin: 'USDT',
+          holdSide: 'short',
+          total: '2.0',
+          available: '2.0',
+          averageOpenPrice: '3820.25',
+          unrealizedPL: '-45.25',
+          leverage: 5,
+          marketPrice: '3797.50',
+        },
+      ];
+
+      setAccountData(mockAccountData);
+      setPositions(mockPositions);
+    } catch (error) {
+      console.error('Error fetching account data:', error);
+    } finally {
+      setAccountLoading(false);
+    }
+  };
+
+  // Load account data on component mount
+  useEffect(() => {
+    fetchAccountData();
+  }, []);
 
   const handleClosePosition = (accountId: string, positionId: string) => {
     setAccounts((prev) =>
@@ -363,10 +453,200 @@ function App() {
             </Card>
           </Grid>
 
-          {/* Accounts Container */}
+          {/* Account Overview */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card>
+              <CardContent>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    mb: 2,
+                  }}
+                >
+                  <Typography variant="h6">Account Overview</Typography>
+                  <IconButton
+                    size="small"
+                    onClick={fetchAccountData}
+                    disabled={accountLoading}
+                  >
+                    <Refresh />
+                  </IconButton>
+                </Box>
+
+                {accountData ? (
+                  <>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      Equity:{' '}
+                      <strong>
+                        $
+                        {parseFloat(accountData.equity).toLocaleString(
+                          'en-US',
+                          { minimumFractionDigits: 2 },
+                        )}
+                      </strong>
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      Available:{' '}
+                      <strong>
+                        $
+                        {parseFloat(accountData.available).toLocaleString(
+                          'en-US',
+                          { minimumFractionDigits: 2 },
+                        )}
+                      </strong>
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      Locked:{' '}
+                      <strong>
+                        $
+                        {parseFloat(accountData.locked).toLocaleString(
+                          'en-US',
+                          { minimumFractionDigits: 2 },
+                        )}
+                      </strong>
+                    </Typography>
+                    {accountData.unrealizedPL && (
+                      <Typography
+                        variant="body2"
+                        color={
+                          parseFloat(accountData.unrealizedPL) >= 0
+                            ? 'success.main'
+                            : 'error.main'
+                        }
+                        sx={{ mb: 1 }}
+                      >
+                        Unrealized P&L:{' '}
+                        <strong>
+                          ${parseFloat(accountData.unrealizedPL).toFixed(2)}
+                        </strong>
+                      </Typography>
+                    )}
+                    <Typography variant="body2" color="text.secondary">
+                      Risk Rate:{' '}
+                      <strong>
+                        {(parseFloat(accountData.crossRiskRate) * 100).toFixed(
+                          2,
+                        )}
+                        %
+                      </strong>
+                    </Typography>
+                  </>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    {accountLoading
+                      ? 'Loading account data...'
+                      : 'No account data available'}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Positions Overview */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <AccountBalanceWallet sx={{ mr: 1 }} />
+                  <Typography variant="h6">Open Positions</Typography>
+                </Box>
+
+                {positions.length > 0 ? (
+                  <>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 2 }}
+                    >
+                      Total Positions: <strong>{positions.length}</strong>
+                    </Typography>
+                    {positions.map((position, index) => (
+                      <Paper
+                        key={index}
+                        sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}
+                      >
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Box>
+                            <Typography
+                              variant="body2"
+                              sx={{ fontWeight: 'bold' }}
+                            >
+                              {position.symbol.replace('_UMCBL', '')}
+                            </Typography>
+                            <Chip
+                              label={position.holdSide.toUpperCase()}
+                              color={
+                                position.holdSide === 'long'
+                                  ? 'success'
+                                  : 'error'
+                              }
+                              size="small"
+                              sx={{ mr: 1 }}
+                            />
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              Size: {position.total} | Avg: $
+                              {parseFloat(position.averageOpenPrice).toFixed(2)}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ textAlign: 'right' }}>
+                            <Typography
+                              variant="body2"
+                              color={
+                                parseFloat(position.unrealizedPL) >= 0
+                                  ? 'success.main'
+                                  : 'error.main'
+                              }
+                              sx={{ fontWeight: 'bold' }}
+                            >
+                              ${parseFloat(position.unrealizedPL).toFixed(2)}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {position.leverage}x
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Paper>
+                    ))}
+                  </>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No open positions
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Legacy Accounts Container */}
           <Grid size={{ xs: 12 }}>
             <Typography variant="h5" sx={{ mb: 3 }}>
-              Accounts
+              Mock Accounts (Demo)
             </Typography>
             <Grid container spacing={2}>
               {accounts.map((account) => (
