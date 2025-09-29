@@ -189,6 +189,15 @@ function App() {
     }
   }, [selectedSymbol, priceData]);
 
+  // Refresh account data when symbol changes
+  useEffect(() => {
+    if (config && currentAccount) {
+      fetchAccountData();
+      setRefreshCountdown(10); // Reset countdown when symbol changes
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSymbol]);
+
   // Fetch account data from Bitget API
   const fetchAccountData = async () => {
     if (!config || config.accounts.length === 0) return;
