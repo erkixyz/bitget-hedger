@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { loadConfig, type Config } from './utils/config';
 import {
   AppBar,
   Toolbar,
@@ -14,7 +15,6 @@ import {
   FormControl,
   Select,
   MenuItem,
-  TextField,
   Divider,
   Chip,
 } from '@mui/material';
@@ -24,8 +24,6 @@ import {
   Settings,
   Close,
   CallSplit,
-  Visibility,
-  VisibilityOff,
   AccountBalanceWallet,
   Refresh,
   Cancel,
@@ -135,8 +133,10 @@ function App() {
   const [currentPrice, setCurrentPrice] = useState(0);
   const [priceData, setPriceData] = useState<{ [key: string]: PriceData }>({});
   const [wsConnected, setWsConnected] = useState(false);
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+
+  // Configuration
+  const [config, setConfig] = useState<Config | null>(null);
+  const [configLoading, setConfigLoading] = useState(true);
 
   // Bitget account data
   const [accountData, setAccountData] = useState<AccountData | null>(null);
@@ -144,27 +144,39 @@ function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [accountLoading, setAccountLoading] = useState(false);
 
-  const [accounts, setAccounts] = useState<Account[]>([
-    {
-      id: '1',
-      name: 'Account 1',
-      apiKey: 'your-api-key-1',
-      equity: 1250.75,
-      positions: [
-        { id: 'pos1', side: 'long', size: 0.5, entryPrice: 65420, pnl: 125.5 },
-        { id: 'pos2', side: 'short', size: 0.2, entryPrice: 65800, pnl: -45.2 },
-      ],
-    },
-    {
-      id: '2',
-      name: 'Account 2',
-      apiKey: 'your-api-key-2',
-      equity: 890.25,
-      positions: [
-        { id: 'pos3', side: 'long', size: 1.0, entryPrice: 65300, pnl: 89.75 },
-      ],
-    },
-  ]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+
+  // Update accounts when config is loaded
+  useEffect(() => {
+    if (config) {
+      const configAccounts: Account[] = config.accounts
+        .filter((acc) => acc.enabled)
+        .map((acc) => ({
+          id: acc.id,
+          name: acc.name,
+          apiKey: acc.apiKey,
+          equity: acc.equity,
+          positions: [
+            // Mock positions for demo - in real app these would come from API
+            {
+              id: `pos${acc.id}-1`,
+              side: 'long' as const,
+              size: 0.5,
+              entryPrice: 65420,
+              pnl: 125.5,
+            },
+            {
+              id: `pos${acc.id}-2`,
+              side: 'short' as const,
+              size: 0.2,
+              entryPrice: 65800,
+              pnl: -45.2,
+            },
+          ],
+        }));
+      setAccounts(configAccounts);
+    }
+  }, [config]);
 
   // Fetch real-time price data using REST API
   useEffect(() => {
@@ -336,6 +348,26 @@ function App() {
     }
   };
 
+  // Load configuration on component mount
+  useEffect(() => {
+    const initConfig = async () => {
+      setConfigLoading(true);
+      try {
+        const loadedConfig = await loadConfig();
+        if (loadedConfig) {
+          setConfig(loadedConfig);
+          setSelectedSymbol(loadedConfig.settings.defaultSymbol);
+        }
+      } catch (error) {
+        console.error('Failed to load configuration:', error);
+      } finally {
+        setConfigLoading(false);
+      }
+    };
+
+    initConfig();
+  }, []);
+
   // Load account data on component mount
   useEffect(() => {
     fetchAccountData();
@@ -499,29 +531,65 @@ function App() {
             </Card>
           </Grid>
 
-          {/* Global Password */}
+          {/* Configuration Status */}
           <Grid size={{ xs: 12 }}>
             <Card>
               <CardContent>
-                <Typography variant="h6" sx={{ mb: 2 }}>
-                  Global Password
-                </Typography>
-                <TextField
-                  fullWidth
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password for all accounts"
-                  InputProps={{
-                    endAdornment: (
-                      <IconButton
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    ),
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 2,
                   }}
-                />
+                >
+                  <Typography variant="h6">Configuration</Typography>
+                  {configLoading && (
+                    <Typography variant="caption" color="text.secondary">
+                      Loading config...
+                    </Typography>
+                  )}
+                </Box>
+
+                {config ? (
+                  <Box>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      ✅ Configuration loaded successfully
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      📁 Accounts found:{' '}
+                      <strong>{config.accounts.length}</strong>
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      🔑 Global password:{' '}
+                      <strong>
+                        {config.globalPassword ? '***configured***' : 'Not set'}
+                      </strong>
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      🔄 Refresh interval:{' '}
+                      <strong>{config.settings.refreshInterval}ms</strong>
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    {configLoading
+                      ? 'Loading configuration...'
+                      : '❌ No configuration found'}
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           </Grid>

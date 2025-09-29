@@ -1,4 +1,65 @@
-# React + TypeScript + Vite
+# Bitget Hedger
+
+A React-based trading dashboard for managing Bitget futures trading accounts with hedging capabilities.
+
+## Features
+
+- 📊 Real-time price monitoring for multiple cryptocurrency pairs
+- 💰 Account balance and equity tracking
+- 📋 Position management with P&L display
+- 📝 Open orders monitoring and cancellation
+- 🔐 Secure configuration management
+- 🔄 Multi-account support
+
+## Setup
+
+### 1. Clone the repository
+```bash
+git clone <repository-url>
+cd bitget-hedger
+npm install
+```
+
+### 2. Configuration Setup
+
+The application uses a configuration file to manage API keys and sensitive data securely.
+
+1. Copy the example configuration:
+```bash
+cp config.example.json config.json
+```
+
+2. Edit `config.json` with your Bitget API credentials:
+```json
+{
+  "globalPassword": "your-secure-password",
+  "accounts": [
+    {
+      "id": "1",
+      "name": "My Trading Account",
+      "apiKey": "your-bitget-api-key",
+      "apiSecret": "your-bitget-api-secret",
+      "passphrase": "your-bitget-passphrase",
+      "equity": 0,
+      "enabled": true
+    }
+  ],
+  "settings": {
+    "apiBaseUrl": "https://api.bitget.com",
+    "refreshInterval": 2000,
+    "defaultSymbol": "BTCUSD.P"
+  }
+}
+```
+
+### 3. Bitget API Setup
+
+1. Log in to [Bitget](https://www.bitget.com/)
+2. Go to API Management section
+3. Create a new API key with required permissions:
+   - **Read-Only**: For fetching account data and positions
+   - **Trade**: For placing and canceling orders (if needed)
+4. Copy the API Key, Secret Key, and Passphrase to your `config.json`peScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

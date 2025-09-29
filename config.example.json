@@ -1,0 +1,28 @@
+{
+  "globalPassword": "your-global-password-here",
+  "accounts": [
+    {
+      "id": "1",
+      "name": "My Main Account",
+      "apiKey": "your-bitget-api-key-here",
+      "apiSecret": "your-bitget-api-secret-here",
+      "passphrase": "your-bitget-passphrase-here",
+      "equity": 0,
+      "enabled": true
+    },
+    {
+      "id": "2",
+      "name": "My Secondary Account",
+      "apiKey": "your-second-api-key-here",
+      "apiSecret": "your-second-api-secret-here",
+      "passphrase": "your-second-passphrase-here",
+      "equity": 0,
+      "enabled": false
+    }
+  ],
+  "settings": {
+    "apiBaseUrl": "https://api.bitget.com",
+    "refreshInterval": 2000,
+    "defaultSymbol": "BTCUSD.P"
+  }
+}
