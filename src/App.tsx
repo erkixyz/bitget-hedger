@@ -25,8 +25,6 @@ import {
   Select,
   MenuItem,
   Chip,
-  Button,
-  Divider,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -552,9 +550,29 @@ function App() {
           <Grid size={{ xs: 12 }}>
             <Card>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Dashboard sx={{ mr: 1 }} />
-                  <Typography variant="h6">Portfolio Overview</Typography>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    mb: 2,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Dashboard sx={{ mr: 1 }} />
+                    <Typography variant="h6">Portfolio Overview</Typography>
+                  </Box>
+                  <IconButton
+                    size="small"
+                    color="primary"
+                    onClick={() => {
+                      fetchAccountData();
+                      setRefreshCountdown(10);
+                    }}
+                    title={`Refresh All (${refreshCountdown}s)`}
+                  >
+                    <Refresh fontSize="small" />
+                  </IconButton>
                 </Box>
 
                 {(() => {
@@ -577,7 +595,9 @@ function App() {
                         </Grid>
 
                         <Grid size={{ xs: 6, md: 3 }}>
-                          <Box sx={{ textAlign: 'center' }}>
+                          <Box
+                            sx={{ textAlign: 'center', position: 'relative' }}
+                          >
                             <Typography
                               variant="h5"
                               sx={{
@@ -589,7 +609,28 @@ function App() {
                               {summary.totalPnL >= 0 ? '+' : ''}$
                               {summary.totalPnL.toFixed(2)}
                             </Typography>
-                            <Typography variant="body2">Total P&L</Typography>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 1,
+                              }}
+                            >
+                              <Typography variant="body2">Total P&L</Typography>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                disabled={
+                                  summary.totalPositions === 0 &&
+                                  summary.totalOrders === 0
+                                }
+                                title="Close All Positions & Cancel All Orders"
+                                sx={{ p: 0.25 }}
+                              >
+                                <Close fontSize="inherit" />
+                              </IconButton>
+                            </Box>
                           </Box>
                         </Grid>
 
@@ -601,10 +642,28 @@ function App() {
                             >
                               {summary.totalPositions}
                             </Typography>
-                            <Typography variant="body2">
-                              Positions ({summary.totalLongPositions}L/
-                              {summary.totalShortPositions}S)
-                            </Typography>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 1,
+                              }}
+                            >
+                              <Typography variant="body2">
+                                Positions ({summary.totalLongPositions}L/
+                                {summary.totalShortPositions}S)
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                disabled={summary.totalPositions === 0}
+                                title="Close All Positions"
+                                sx={{ p: 0.25 }}
+                              >
+                                <Close fontSize="inherit" />
+                              </IconButton>
+                            </Box>
                           </Box>
                         </Grid>
 
@@ -616,53 +675,31 @@ function App() {
                             >
                               {summary.totalOrders}
                             </Typography>
-                            <Typography variant="body2">Open Orders</Typography>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 1,
+                              }}
+                            >
+                              <Typography variant="body2">
+                                Open Orders
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                color="warning"
+                                onClick={handleCancelAllOrders}
+                                disabled={summary.totalOrders === 0}
+                                title="Cancel All Orders"
+                                sx={{ p: 0.25 }}
+                              >
+                                <Clear fontSize="inherit" />
+                              </IconButton>
+                            </Box>
                           </Box>
                         </Grid>
                       </Grid>
-
-                      <Divider sx={{ my: 2 }} />
-
-                      {/* Batch Actions */}
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          gap: 2,
-                          justifyContent: 'center',
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <Button
-                          variant="outlined"
-                          color="primary"
-                          startIcon={<Refresh />}
-                          onClick={() => {
-                            fetchAccountData();
-                            setRefreshCountdown(10);
-                          }}
-                        >
-                          Refresh All ({refreshCountdown}s)
-                        </Button>
-
-                        <Button
-                          variant="outlined"
-                          color="warning"
-                          startIcon={<Clear />}
-                          onClick={handleCancelAllOrders}
-                          disabled={summary.totalOrders === 0}
-                        >
-                          Cancel All Orders ({summary.totalOrders})
-                        </Button>
-
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          startIcon={<Close />}
-                          disabled={summary.totalPositions === 0}
-                        >
-                          Close All Positions ({summary.totalPositions})
-                        </Button>
-                      </Box>
                     </>
                   );
                 })()}
