@@ -293,6 +293,8 @@ export async function getOrders(
 export async function cancelOrder(
   account: BitgetAccount,
   orderId: string,
+  symbol: string,
+  marginCoin: string = 'USDT',
 ): Promise<boolean> {
   const response = await makeApiRequest<{ orderId: string }>(
     account,
@@ -301,7 +303,9 @@ export async function cancelOrder(
     {},
     {
       orderId,
+      symbol,
       productType: 'umcbl',
+      marginCoin,
     },
   );
 

@@ -302,23 +302,30 @@ function App() {
     initConfig();
   }, []);
 
-  // Load account data when config changes
+  // Load account data when config changes and set up auto-refresh
   useEffect(() => {
     if (config) {
       fetchAccountData();
+
+      // Set up auto-refresh for account data every 10 seconds
+      const accountInterval = setInterval(fetchAccountData, 10000);
+
+      return () => {
+        clearInterval(accountInterval);
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
   // Cancel order function
-  const handleCancelOrder = async (orderId: string) => {
+  const handleCancelOrder = async (order: BitgetOrder) => {
     if (!currentAccount) return;
 
     try {
-      await cancelOrder(currentAccount, orderId);
+      await cancelOrder(currentAccount, order.orderId, order.symbol);
       // Remove order from local state
-      setOrders((prev) => prev.filter((order) => order.orderId !== orderId));
-      console.log('✅ Order cancelled successfully:', orderId);
+      setOrders((prev) => prev.filter((o) => o.orderId !== order.orderId));
+      console.log('✅ Order cancelled successfully:', order.orderId);
     } catch (error) {
       console.error('❌ Error cancelling order:', error);
       // Optionally show error message to user
@@ -833,7 +840,7 @@ function App() {
                             <IconButton
                               size="small"
                               color="error"
-                              onClick={() => handleCancelOrder(order.orderId)}
+                              onClick={() => handleCancelOrder(order)}
                             >
                               <Cancel fontSize="small" />
                             </IconButton>
