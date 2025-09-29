@@ -101,15 +101,17 @@ function App() {
   // Configuration
   const [config, setConfig] = useState<Config | null>(null);
 
-  // Bitget account data (using first enabled account)
-  const [accountBalance, setAccountBalance] =
-    useState<BitgetAccountBalance | null>(null);
-  const [positions, setPositions] = useState<BitgetPosition[]>([]);
-  const [orders, setOrders] = useState<BitgetOrder[]>([]);
-  const [accountLoading, setAccountLoading] = useState(false);
-  const [currentAccount, setCurrentAccount] = useState<BitgetAccount | null>(
-    null,
-  );
+  // Bitget account data for all accounts
+  const [accountsData, setAccountsData] = useState<{
+    [accountId: string]: {
+      account: BitgetAccount;
+      balance: BitgetAccountBalance | null;
+      positions: BitgetPosition[];
+      orders: BitgetOrder[];
+      loading: boolean;
+      error?: string;
+    };
+  }>({});
 
   // Refresh countdown timer
   const [refreshCountdown, setRefreshCountdown] = useState<number>(10);
@@ -189,59 +191,97 @@ function App() {
 
   // Refresh account data when symbol changes
   useEffect(() => {
-    if (config && currentAccount) {
+    if (config && Object.keys(accountsData).length > 0) {
       fetchAccountData();
       setRefreshCountdown(10); // Reset countdown when symbol changes
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSymbol]);
 
-  // Fetch account data from Bitget API
+  // Fetch account data from Bitget API for all accounts
   const fetchAccountData = async () => {
     if (!config || config.accounts.length === 0) return;
 
-    // Use first enabled account
-    const firstAccount = config.accounts.find((acc) => acc.enabled);
-    if (!firstAccount) return;
+    const enabledAccounts = config.accounts.filter((acc) => acc.enabled);
+    if (enabledAccounts.length === 0) return;
 
-    setAccountLoading(true);
+    // Set loading state for all accounts
+    setAccountsData((prev) => {
+      const newData = { ...prev };
+      enabledAccounts.forEach((account) => {
+        newData[account.id] = {
+          ...newData[account.id],
+          account: {
+            id: account.id,
+            name: account.name,
+            apiKey: account.apiKey,
+            apiSecret: account.apiSecret,
+            passphrase: account.passphrase,
+            enabled: account.enabled,
+          },
+          loading: true,
+          balance: null,
+          positions: [],
+          orders: [],
+        };
+      });
+      return newData;
+    });
 
-    try {
-      const bitgetAccount: BitgetAccount = {
-        id: firstAccount.id,
-        name: firstAccount.name,
-        apiKey: firstAccount.apiKey,
-        apiSecret: firstAccount.apiSecret,
-        passphrase: firstAccount.passphrase,
-        enabled: firstAccount.enabled,
-      };
+    // Fetch data for each account
+    for (const account of enabledAccounts) {
+      try {
+        const bitgetAccount: BitgetAccount = {
+          id: account.id,
+          name: account.name,
+          apiKey: account.apiKey,
+          apiSecret: account.apiSecret,
+          passphrase: account.passphrase,
+          enabled: account.enabled,
+        };
 
-      setCurrentAccount(bitgetAccount);
+        // Fetch account balance
+        const balanceArray = await getAccountBalance(bitgetAccount);
+        const balance = balanceArray.length > 0 ? balanceArray[0] : null;
 
-      // Fetch account balance
-      const balanceArray = await getAccountBalance(bitgetAccount);
-      const balance = balanceArray.length > 0 ? balanceArray[0] : null;
-      setAccountBalance(balance);
+        // Fetch positions
+        const positionsData = await getPositions(bitgetAccount);
 
-      // Fetch positions
-      const positionsData = await getPositions(bitgetAccount);
-      setPositions(positionsData);
+        // Fetch orders
+        const ordersData = await getOrders(bitgetAccount);
 
-      // Fetch orders
-      const ordersData = await getOrders(bitgetAccount);
-      setOrders(ordersData);
+        // Update account data
+        setAccountsData((prev) => ({
+          ...prev,
+          [account.id]: {
+            ...prev[account.id],
+            balance,
+            positions: positionsData,
+            orders: ordersData,
+            loading: false,
+          },
+        }));
 
-      console.log(
-        `✅ Successfully loaded data for account: ${firstAccount.name}`,
-      );
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error(
-        `❌ Error fetching data for account ${firstAccount.name}:`,
-        errorMsg,
-      );
-    } finally {
-      setAccountLoading(false);
+        console.log(`✅ Successfully loaded data for account: ${account.name}`);
+      } catch (error) {
+        const errorMsg =
+          error instanceof Error ? error.message : 'Unknown error';
+
+        // Set error state for this account
+        setAccountsData((prev) => ({
+          ...prev,
+          [account.id]: {
+            ...prev[account.id],
+            loading: false,
+            error: errorMsg,
+          },
+        }));
+
+        console.error(
+          `❌ Error fetching data for account ${account.name}:`,
+          errorMsg,
+        );
+      }
     }
   };
 
@@ -293,13 +333,22 @@ function App() {
   }, [config]);
 
   // Cancel order function
-  const handleCancelOrder = async (order: BitgetOrder) => {
-    if (!currentAccount) return;
+  const handleCancelOrder = async (order: BitgetOrder, accountId: string) => {
+    const accountData = accountsData[accountId];
+    if (!accountData) return;
 
     try {
-      await cancelOrder(currentAccount, order.orderId, order.symbol);
+      await cancelOrder(accountData.account, order.orderId, order.symbol);
       // Remove order from local state
-      setOrders((prev) => prev.filter((o) => o.orderId !== order.orderId));
+      setAccountsData((prev) => ({
+        ...prev,
+        [accountId]: {
+          ...prev[accountId],
+          orders: prev[accountId].orders.filter(
+            (o) => o.orderId !== order.orderId,
+          ),
+        },
+      }));
       console.log('✅ Order cancelled successfully:', order.orderId);
     } catch (error) {
       console.error('❌ Error cancelling order:', error);
@@ -314,7 +363,9 @@ function App() {
           <Toolbar>
             <TrendingUp sx={{ mr: 2 }} />
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              Bitget Hedger
+              Bitget Hedger{' '}
+              {config &&
+                `(${config.accounts.filter((acc) => acc.enabled).length})`}
             </Typography>
             <IconButton color="inherit">
               <Settings />
@@ -423,350 +474,368 @@ function App() {
             </Card>
           </Grid>
 
-          {/* Account Overview */}
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Card>
-              <CardContent>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    mb: 2,
-                  }}
-                >
-                  <Typography variant="h6">Account Overview</Typography>
-                  <IconButton
-                    size="medium"
-                    onClick={() => {
-                      fetchAccountData();
-                      setRefreshCountdown(10); // Reset countdown on manual refresh
+          {/* Account Sections - one for each enabled account */}
+          {Object.values(accountsData).map((accountData) => (
+            <Grid key={accountData.account.id} size={{ xs: 12 }}>
+              <Card>
+                <CardContent>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      mb: 2,
                     }}
-                    disabled={accountLoading}
-                    sx={{ position: 'relative' }}
                   >
-                    <Refresh sx={{ fontSize: 28 }} />
-                    {!accountLoading && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: '50%',
-                          transform: 'translate(-50%, -50%)',
-                          fontSize: '12px',
-                          fontWeight: 'bold',
-                          color: 'inherit',
-                          textShadow: '1px 1px 2px rgba(255,255,255,0.8)',
-                          lineHeight: 1,
-                        }}
-                      >
-                        {refreshCountdown}
-                      </Typography>
-                    )}
-                  </IconButton>
-                </Box>
-
-                {accountBalance ? (
-                  <>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
+                    <Typography variant="h6">
+                      {accountData.account.name} - Account Overview
+                    </Typography>
+                    <IconButton
+                      size="medium"
+                      onClick={() => {
+                        fetchAccountData();
+                        setRefreshCountdown(10);
+                      }}
+                      disabled={accountData.loading}
+                      sx={{ position: 'relative' }}
                     >
-                      Equity:{' '}
-                      <strong>
-                        $
-                        {parseFloat(accountBalance.equity).toLocaleString(
-                          'en-US',
-                          { minimumFractionDigits: 2 },
-                        )}
-                      </strong>
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
-                    >
-                      Available:{' '}
-                      <strong>
-                        $
-                        {parseFloat(accountBalance.available).toLocaleString(
-                          'en-US',
-                          { minimumFractionDigits: 2 },
-                        )}
-                      </strong>
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
-                    >
-                      Locked:{' '}
-                      <strong>
-                        $
-                        {parseFloat(accountBalance.locked).toLocaleString(
-                          'en-US',
-                          { minimumFractionDigits: 2 },
-                        )}
-                      </strong>
-                    </Typography>
-                    {accountBalance.unrealizedPL && (
-                      <Typography
-                        variant="body2"
-                        color={
-                          parseFloat(accountBalance.unrealizedPL) >= 0
-                            ? 'success.main'
-                            : 'error.main'
-                        }
-                        sx={{ mb: 1 }}
-                      >
-                        Unrealized P&L:{' '}
-                        <strong>
-                          ${parseFloat(accountBalance.unrealizedPL).toFixed(2)}
-                        </strong>
-                      </Typography>
-                    )}
-                    <Typography variant="body2" color="text.secondary">
-                      Risk Rate:{' '}
-                      <strong>
-                        {(
-                          parseFloat(accountBalance.crossRiskRate) * 100
-                        ).toFixed(2)}
-                        %
-                      </strong>
-                    </Typography>
-                  </>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    {accountLoading
-                      ? 'Loading account data...'
-                      : 'No account data available'}
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Positions Overview */}
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <AccountBalanceWallet sx={{ mr: 1 }} />
-                  <Typography variant="h6">Open Positions</Typography>
-                </Box>
-
-                {(() => {
-                  // Filter out empty positions (where total is 0 or empty)
-                  const activePositions = positions.filter(
-                    (position) =>
-                      position.total && parseFloat(position.total) !== 0,
-                  );
-
-                  return activePositions.length > 0 ? (
-                    <>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mb: 2 }}
-                      >
-                        Positions for {selectedSymbol}:{' '}
-                        <strong>{activePositions.length}</strong>
-                      </Typography>
-                      {activePositions.map((position, index) => (
-                        <Paper
-                          key={index}
-                          sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}
+                      <Refresh sx={{ fontSize: 28 }} />
+                      {!accountData.loading && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            fontSize: '12px',
+                            fontWeight: 'bold',
+                            color: 'inherit',
+                            textShadow: '1px 1px 2px rgba(255,255,255,0.8)',
+                            lineHeight: 1,
+                          }}
                         >
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Box>
+                          {refreshCountdown}
+                        </Typography>
+                      )}
+                    </IconButton>
+                  </Box>
+
+                  <Grid container spacing={3}>
+                    {/* Account Balance */}
+                    <Grid size={{ xs: 12, md: 4 }}>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography
+                          variant="h6"
+                          sx={{ mb: 1, display: 'flex', alignItems: 'center' }}
+                        >
+                          <AccountBalanceWallet sx={{ mr: 1 }} />
+                          Balance
+                        </Typography>
+                        {accountData.loading ? (
+                          <Typography variant="body2" color="text.secondary">
+                            Loading...
+                          </Typography>
+                        ) : accountData.error ? (
+                          <Typography variant="body2" color="error.main">
+                            Error: {accountData.error}
+                          </Typography>
+                        ) : accountData.balance ? (
+                          <>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mb: 0.5 }}
+                            >
+                              Equity:{' '}
+                              <strong>
+                                $
+                                {parseFloat(
+                                  accountData.balance.equity,
+                                ).toLocaleString('en-US', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </strong>
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mb: 0.5 }}
+                            >
+                              Available:{' '}
+                              <strong>
+                                $
+                                {parseFloat(
+                                  accountData.balance.available,
+                                ).toLocaleString('en-US', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </strong>
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mb: 0.5 }}
+                            >
+                              Locked:{' '}
+                              <strong>
+                                $
+                                {parseFloat(
+                                  accountData.balance.locked,
+                                ).toLocaleString('en-US', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </strong>
+                            </Typography>
+                            {accountData.balance.unrealizedPL && (
                               <Typography
                                 variant="body2"
-                                sx={{ fontWeight: 'bold' }}
-                              >
-                                {position.symbol.replace('_UMCBL', '')}
-                              </Typography>
-                              <Chip
-                                label={position.holdSide.toUpperCase()}
                                 color={
-                                  position.holdSide === 'long'
-                                    ? 'success'
-                                    : 'error'
-                                }
-                                size="small"
-                                sx={{ mr: 1 }}
-                              />
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                Size: {position.total} | Avg: $
-                                {parseFloat(position.averageOpenPrice).toFixed(
-                                  2,
-                                )}
-                              </Typography>
-                            </Box>
-                            <Box sx={{ textAlign: 'right' }}>
-                              <Typography
-                                variant="body2"
-                                color={
-                                  parseFloat(position.unrealizedPL) >= 0
+                                  parseFloat(
+                                    accountData.balance.unrealizedPL,
+                                  ) >= 0
                                     ? 'success.main'
                                     : 'error.main'
                                 }
                                 sx={{ fontWeight: 'bold' }}
                               >
-                                ${parseFloat(position.unrealizedPL).toFixed(2)}
+                                Unrealized P&L: $
+                                {parseFloat(
+                                  accountData.balance.unrealizedPL,
+                                ).toFixed(2)}
                               </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                {position.leverage}x
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </Paper>
-                      ))}
-                    </>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      No open positions for {selectedSymbol}
-                    </Typography>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          </Grid>
+                            )}
+                          </>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No balance data
+                          </Typography>
+                        )}
+                      </Box>
+                    </Grid>
 
-          {/* Open Orders */}
-          <Grid size={{ xs: 12 }}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Schedule sx={{ mr: 1 }} />
-                  <Typography variant="h6">Open Orders</Typography>
-                </Box>
-
-                {(() => {
-                  // Filter orders by selected symbol
-                  const selectedApiSymbol = getApiSymbol(selectedSymbol);
-                  const filteredOrders = orders.filter(
-                    (order) => order.symbol === selectedApiSymbol,
-                  );
-
-                  return filteredOrders.length > 0 ? (
-                    <>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mb: 2 }}
-                      >
-                        Active Orders for {selectedSymbol}:{' '}
-                        <strong>{filteredOrders.length}</strong>
-                      </Typography>
-                      {filteredOrders.map((order, index) => (
-                        <Paper
-                          key={index}
-                          sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}
-                        >
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Box>
+                    {/* Positions */}
+                    <Grid size={{ xs: 12, md: 4 }}>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="h6" sx={{ mb: 1 }}>
+                          Positions for {selectedSymbol}
+                        </Typography>
+                        {(() => {
+                          if (accountData.loading) {
+                            return (
                               <Typography
                                 variant="body2"
-                                sx={{ fontWeight: 'bold' }}
+                                color="text.secondary"
                               >
-                                {order.symbol.replace('_UMCBL', '')} •{' '}
-                                {order.orderType.toUpperCase()}
+                                Loading...
                               </Typography>
-                              <Box
-                                sx={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 1,
-                                  mt: 0.5,
-                                }}
+                            );
+                          }
+
+                          const selectedApiSymbol =
+                            getApiSymbol(selectedSymbol);
+                          const filteredPositions =
+                            accountData.positions.filter(
+                              (position) =>
+                                position.symbol === selectedApiSymbol &&
+                                position.total &&
+                                parseFloat(position.total) !== 0,
+                            );
+
+                          return filteredPositions.length > 0 ? (
+                            filteredPositions.map((position, index) => (
+                              <Paper
+                                key={index}
+                                sx={{ p: 1.5, mb: 1, bgcolor: 'grey.50' }}
                               >
-                                <Chip
-                                  label={order.side
-                                    .replace('_', ' ')
-                                    .toUpperCase()}
-                                  color={
-                                    order.side.includes('long')
-                                      ? 'success'
-                                      : 'error'
-                                  }
-                                  size="small"
-                                />
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                  }}
                                 >
-                                  Size: {order.size} @ $
-                                  {parseFloat(order.price).toFixed(2)}
-                                </Typography>
-                              </Box>
-                            </Box>
-                            <Box
-                              sx={{
-                                textAlign: 'right',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                              }}
-                            >
-                              <Box>
-                                <Typography
-                                  variant="body2"
-                                  sx={{ fontWeight: 'bold' }}
-                                >
-                                  $
-                                  {(
-                                    parseFloat(order.size) *
-                                    parseFloat(order.price)
-                                  ).toFixed(2)}
-                                </Typography>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  {order.orderType} order
-                                </Typography>
-                              </Box>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => handleCancelOrder(order)}
+                                  <Box>
+                                    <Chip
+                                      label={position.holdSide.toUpperCase()}
+                                      color={
+                                        position.holdSide === 'long'
+                                          ? 'success'
+                                          : 'error'
+                                      }
+                                      size="small"
+                                      sx={{ mb: 0.5 }}
+                                    />
+                                    <Typography
+                                      variant="caption"
+                                      display="block"
+                                      color="text.secondary"
+                                    >
+                                      Size: {position.total}
+                                    </Typography>
+                                    <Typography
+                                      variant="caption"
+                                      display="block"
+                                      color="text.secondary"
+                                    >
+                                      Avg: $
+                                      {parseFloat(
+                                        position.averageOpenPrice,
+                                      ).toFixed(2)}
+                                    </Typography>
+                                  </Box>
+                                  <Box sx={{ textAlign: 'right' }}>
+                                    <Typography
+                                      variant="body2"
+                                      color={
+                                        parseFloat(position.unrealizedPL) >= 0
+                                          ? 'success.main'
+                                          : 'error.main'
+                                      }
+                                      sx={{ fontWeight: 'bold' }}
+                                    >
+                                      $
+                                      {parseFloat(
+                                        position.unrealizedPL,
+                                      ).toFixed(2)}
+                                    </Typography>
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                    >
+                                      {position.leverage}x
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              </Paper>
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              No positions for {selectedSymbol}
+                            </Typography>
+                          );
+                        })()}
+                      </Box>
+                    </Grid>
+
+                    {/* Orders */}
+                    <Grid size={{ xs: 12, md: 4 }}>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography
+                          variant="h6"
+                          sx={{ mb: 1, display: 'flex', alignItems: 'center' }}
+                        >
+                          <Schedule sx={{ mr: 1 }} />
+                          Orders for {selectedSymbol}
+                        </Typography>
+                        {(() => {
+                          if (accountData.loading) {
+                            return (
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
                               >
-                                <Cancel fontSize="small" />
-                              </IconButton>
-                            </Box>
-                          </Box>
-                        </Paper>
-                      ))}
-                    </>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      No open orders for {selectedSymbol}
-                    </Typography>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          </Grid>
+                                Loading...
+                              </Typography>
+                            );
+                          }
+
+                          const selectedApiSymbol =
+                            getApiSymbol(selectedSymbol);
+                          const filteredOrders = accountData.orders.filter(
+                            (order) => order.symbol === selectedApiSymbol,
+                          );
+
+                          return filteredOrders.length > 0 ? (
+                            filteredOrders.map((order, index) => (
+                              <Paper
+                                key={index}
+                                sx={{ p: 1.5, mb: 1, bgcolor: 'grey.50' }}
+                              >
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                  }}
+                                >
+                                  <Box>
+                                    <Typography
+                                      variant="body2"
+                                      sx={{ fontWeight: 'bold' }}
+                                    >
+                                      {order.orderType.toUpperCase()}
+                                    </Typography>
+                                    <Chip
+                                      label={order.side
+                                        .replace('_', ' ')
+                                        .toUpperCase()}
+                                      color={
+                                        order.side.includes('long')
+                                          ? 'success'
+                                          : 'error'
+                                      }
+                                      size="small"
+                                      sx={{ mb: 0.5 }}
+                                    />
+                                    <Typography
+                                      variant="caption"
+                                      display="block"
+                                      color="text.secondary"
+                                    >
+                                      Size: {order.size} @ $
+                                      {parseFloat(order.price).toFixed(2)}
+                                    </Typography>
+                                  </Box>
+                                  <Box
+                                    sx={{
+                                      textAlign: 'right',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 1,
+                                    }}
+                                  >
+                                    <Box>
+                                      <Typography
+                                        variant="body2"
+                                        sx={{ fontWeight: 'bold' }}
+                                      >
+                                        $
+                                        {(
+                                          parseFloat(order.size) *
+                                          parseFloat(order.price)
+                                        ).toFixed(2)}
+                                      </Typography>
+                                    </Box>
+                                    <IconButton
+                                      size="small"
+                                      color="error"
+                                      onClick={() =>
+                                        handleCancelOrder(
+                                          order,
+                                          accountData.account.id,
+                                        )
+                                      }
+                                    >
+                                      <Cancel fontSize="small" />
+                                    </IconButton>
+                                  </Box>
+                                </Box>
+                              </Paper>
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              No orders for {selectedSymbol}
+                            </Typography>
+                          );
+                        })()}
+                      </Box>
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
         </Grid>
       </Container>
     </Box>
