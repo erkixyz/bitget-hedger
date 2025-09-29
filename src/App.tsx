@@ -100,7 +100,6 @@ function App() {
 
   // Configuration
   const [config, setConfig] = useState<Config | null>(null);
-  const [configLoading, setConfigLoading] = useState(true);
 
   // Bitget account data (using first enabled account)
   const [accountBalance, setAccountBalance] =
@@ -108,7 +107,6 @@ function App() {
   const [positions, setPositions] = useState<BitgetPosition[]>([]);
   const [orders, setOrders] = useState<BitgetOrder[]>([]);
   const [accountLoading, setAccountLoading] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
   const [currentAccount, setCurrentAccount] = useState<BitgetAccount | null>(
     null,
   );
@@ -207,7 +205,6 @@ function App() {
     if (!firstAccount) return;
 
     setAccountLoading(true);
-    setApiError(null);
 
     try {
       const bitgetAccount: BitgetAccount = {
@@ -239,7 +236,6 @@ function App() {
       );
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      setApiError(errorMsg);
       console.error(
         `❌ Error fetching data for account ${firstAccount.name}:`,
         errorMsg,
@@ -252,7 +248,6 @@ function App() {
   // Load configuration on component mount
   useEffect(() => {
     const initConfig = async () => {
-      setConfigLoading(true);
       try {
         const loadedConfig = await loadConfig();
         if (loadedConfig) {
@@ -261,8 +256,6 @@ function App() {
         }
       } catch (error) {
         console.error('Failed to load configuration:', error);
-      } finally {
-        setConfigLoading(false);
       }
     };
 
@@ -425,83 +418,6 @@ function App() {
                       24h Change
                     </Typography>
                   </Box>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Configuration Status */}
-          <Grid size={{ xs: 12 }}>
-            <Card>
-              <CardContent>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
-                  }}
-                >
-                  <Typography variant="h6">Configuration</Typography>
-                  {configLoading && (
-                    <Typography variant="caption" color="text.secondary">
-                      Loading config...
-                    </Typography>
-                  )}
-                </Box>
-
-                {config ? (
-                  <Box>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
-                    >
-                      ✅ Configuration loaded successfully
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
-                    >
-                      📁 Accounts found:{' '}
-                      <strong>{config.accounts.length}</strong>
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
-                    >
-                      🔑 Account credentials:{' '}
-                      <strong>
-                        {config.accounts.every(
-                          (acc) =>
-                            acc.apiKey && acc.apiSecret && acc.passphrase,
-                        )
-                          ? '***all configured***'
-                          : 'Missing credentials'}
-                      </strong>
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      🔄 Refresh interval:{' '}
-                      <strong>{config.settings.refreshInterval}ms</strong>
-                    </Typography>
-                    {apiError && (
-                      <Typography
-                        variant="body2"
-                        color="error.main"
-                        sx={{ mt: 1, fontWeight: 'bold' }}
-                      >
-                        ❌ API Error: {apiError}
-                      </Typography>
-                    )}
-                  </Box>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    {configLoading
-                      ? 'Loading configuration...'
-                      : '❌ No configuration found'}
-                  </Typography>
                 )}
               </CardContent>
             </Card>
