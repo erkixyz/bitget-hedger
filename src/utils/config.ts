@@ -30,10 +30,7 @@ export const loadConfig = async (): Promise<Config | null> => {
       throw new Error(`Config file not found: ${response.status}`);
     }
     const config: Config = await response.json();
-    console.log('✅ Successfully loaded config:', {
-      accountCount: config.accounts.length,
-      enabledAccounts: config.accounts.filter((acc) => acc.enabled).length,
-    });
+
     return config;
   } catch (error) {
     console.error('❌ Error loading config:', error);
@@ -66,7 +63,7 @@ export const saveConfig = async (config: Config): Promise<boolean> => {
   try {
     // In a real production app, this would need a backend endpoint
     // For development, we can't write directly to files from browser
-    console.log('Configuration to save:', config);
+
     localStorage.setItem('bitget-config', JSON.stringify(config));
     return true;
   } catch (error) {

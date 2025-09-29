@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { loadConfig, type Config } from './utils/config';
 import {
   getAccountBalance,
@@ -31,7 +31,6 @@ import {
   TrendingDown,
   Settings,
   AccountBalanceWallet,
-  Refresh,
   Cancel,
   Schedule,
   Close,
@@ -88,9 +87,9 @@ interface PriceData {
 // Helper function to convert display symbols to API symbols
 const getApiSymbol = (displaySymbol: string): string => {
   const symbolMap: { [key: string]: string } = {
-    'BTCUSD.P': 'BTCUSDT_UMCBL',
-    'ETHUSD.P': 'ETHUSDT_UMCBL',
-    'BNBUSDT.P': 'BNBUSDT_UMCBL',
+    'BTCUSD.P': 'BTCUSDT',
+    'ETHUSD.P': 'ETHUSDT',
+    'BNBUSDT.P': 'BNBUSDT',
   };
   return symbolMap[displaySymbol] || displaySymbol;
 };
@@ -121,15 +120,12 @@ function App() {
     };
   }>({});
 
-  // Refresh countdown timer
-  const [refreshCountdown, setRefreshCountdown] = useState<number>(10);
-
   // Real-time price data using WebSocket
   useEffect(() => {
     const symbols = [
-      { api: 'BTCUSDT_UMCBL', display: 'BTCUSD.P' },
-      { api: 'ETHUSDT_UMCBL', display: 'ETHUSD.P' },
-      { api: 'BNBUSDT_UMCBL', display: 'BNBUSDT.P' },
+      { api: 'BTCUSDT', display: 'BTCUSD.P' },
+      { api: 'ETHUSDT', display: 'ETHUSD.P' },
+      { api: 'BNBUSDT', display: 'BNBUSDT.P' },
     ];
 
     let ws: WebSocket | null = null;
@@ -139,80 +135,25 @@ function App() {
     const connectWebSocket = () => {
       try {
         // Bitget WebSocket endpoint for futures market data
-        ws = new WebSocket('wss://ws.bitget.com/mix/v1/stream');
+        ws = new WebSocket('wss://ws.bitget.com/v2/ws/public');
 
         ws.onopen = () => {
-          console.log('✅ WebSocket connected');
           setWsConnected(true);
 
-          // Get initial price data via REST API
-          const fetchInitialPrices = async () => {
-            console.log('🔄 Fetching initial prices via REST API...');
-            for (const symbol of symbols) {
-              try {
-                const response = await fetch(
-                  `https://api.bitget.com/api/mix/v1/market/ticker?symbol=${symbol.api}`,
-                );
+          // Subscribe to ticker channels using Bitget v2 format
+          symbols.forEach((symbol) => {
+            const subscription = {
+              op: 'subscribe',
+              args: [
+                {
+                  instType: 'USDT-FUTURES',
+                  channel: 'ticker',
+                  instId: symbol.api,
+                },
+              ],
+            };
 
-                if (response.ok) {
-                  const data = await response.json();
-                  console.log(`📊 REST API response for ${symbol.api}:`, data);
-
-                  if (data.code === '00000' && data.data) {
-                    const ticker = data.data;
-                    const price = parseFloat(ticker.last);
-                    const change24h =
-                      parseFloat(ticker.priceChangePercent) * 100;
-                    const volume24h = parseFloat(ticker.baseVolume || '0');
-
-                    console.log(
-                      `💰 Initial price: ${symbol.display} = $${price}`,
-                    );
-
-                    setPriceData((prev) => ({
-                      ...prev,
-                      [symbol.display]: {
-                        symbol: symbol.display,
-                        price,
-                        change24h,
-                        volume24h,
-                        lastUpdate: Date.now(),
-                      },
-                    }));
-
-                    if (symbol.display === selectedSymbol) {
-                      setCurrentPrice(price);
-                    }
-                  }
-                }
-              } catch (error) {
-                console.error(
-                  `❌ Error fetching initial ${symbol.display} price:`,
-                  error,
-                );
-              }
-            }
-          };
-
-          fetchInitialPrices();
-
-          // Subscribe to ticker channels for all symbols
-          const subscriptions = symbols.map((symbol) => ({
-            op: 'subscribe',
-            args: [
-              {
-                instType: 'UMCBL',
-                channel: 'ticker',
-                instId: symbol.api,
-              },
-            ],
-          }));
-
-          console.log('📡 Sending WebSocket subscriptions:', subscriptions);
-
-          subscriptions.forEach((sub) => {
-            console.log('📤 Subscribing to:', JSON.stringify(sub));
-            ws?.send(JSON.stringify(sub));
+            ws?.send(JSON.stringify(subscription));
           });
 
           // Setup ping to keep connection alive
@@ -229,40 +170,46 @@ function App() {
 
             const data = JSON.parse(event.data);
 
-            // Debug: Log all WebSocket messages
-            console.log('📡 WebSocket message:', data);
+            // Handle different Bitget response types
+            if (data.event === 'error') {
+              console.error('❌ WebSocket subscription error:', data);
+              return;
+            }
 
-            if (data.arg && data.arg.channel === 'ticker' && data.data) {
-              const tickerData = data.data[0];
+            if (data.event === 'subscribe') {
+              return;
+            }
+
+            // Handle ticker data - Bitget v2 API format
+            if (
+              data.arg &&
+              data.arg.channel === 'ticker' &&
+              data.data &&
+              Array.isArray(data.data)
+            ) {
               const instId = data.arg.instId;
-
-              console.log(`📊 Ticker data for ${instId}:`, tickerData);
+              const tickerData = data.data[0];
 
               // Find matching symbol
               const symbolInfo = symbols.find((s) => s.api === instId);
               if (!symbolInfo) {
-                console.warn(`⚠️ No matching symbol found for ${instId}`);
                 return;
               }
 
               const price = parseFloat(
-                tickerData.last || tickerData.lastPr || tickerData.lastPrice,
+                tickerData.lastPr || tickerData.last || tickerData.close || '0',
               );
-              const change24h =
-                parseFloat(
+              const change24h = parseFloat(
+                tickerData.changeUtc24h ||
+                  tickerData.chgUTC ||
                   tickerData.change24h ||
-                    tickerData.chgUTC ||
-                    tickerData.changePercentage,
-                ) * 100;
-              const volume24h = parseFloat(
-                tickerData.baseVolume ||
-                  tickerData.volCcy24h ||
-                  tickerData.volume ||
                   '0',
               );
-
-              console.log(
-                `💰 Parsed price data: ${symbolInfo.display} = $${price}, change: ${change24h}%`,
+              const volume24h = parseFloat(
+                tickerData.volCcy24h ||
+                  tickerData.baseVolume ||
+                  tickerData.vol ||
+                  '0',
               );
 
               setPriceData((prev) => ({
@@ -280,9 +227,6 @@ function App() {
               if (symbolInfo.display === selectedSymbol) {
                 setCurrentPrice(price);
               }
-            } else {
-              // Log other message types
-              console.log('📝 Other WebSocket message type:', data);
             }
           } catch (error) {
             console.error(
@@ -294,7 +238,6 @@ function App() {
         };
 
         ws.onclose = () => {
-          console.log('🔌 WebSocket disconnected');
           setWsConnected(false);
 
           if (pingTimer) {
@@ -304,9 +247,8 @@ function App() {
 
           // Attempt to reconnect after 5 seconds
           reconnectTimer = setTimeout(() => {
-            console.log('🔄 Attempting to reconnect WebSocket...');
             connectWebSocket();
-          }, 5000);
+          }, 3000);
         };
 
         ws.onerror = (error) => {
@@ -344,17 +286,8 @@ function App() {
     }
   }, [selectedSymbol, priceData]);
 
-  // Refresh account data when symbol changes
-  useEffect(() => {
-    if (config && Object.keys(accountsData).length > 0) {
-      fetchAccountData();
-      setRefreshCountdown(10); // Reset countdown when symbol changes
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSymbol]);
-
   // Fetch account data from Bitget API for all accounts
-  const fetchAccountData = async () => {
+  const fetchAccountData = useCallback(async () => {
     if (!config || config.accounts.length === 0) return;
 
     const enabledAccounts = config.accounts.filter((acc) => acc.enabled);
@@ -416,8 +349,6 @@ function App() {
             loading: false,
           },
         }));
-
-        console.log(`✅ Successfully loaded data for account: ${account.name}`);
       } catch (error) {
         const errorMsg =
           error instanceof Error ? error.message : 'Unknown error';
@@ -438,7 +369,14 @@ function App() {
         );
       }
     }
-  };
+  }, [config]);
+
+  // Refresh account data when symbol changes
+  useEffect(() => {
+    if (config) {
+      fetchAccountData();
+    }
+  }, [selectedSymbol, config, fetchAccountData]);
 
   // Load configuration on component mount
   useEffect(() => {
@@ -461,27 +399,14 @@ function App() {
   useEffect(() => {
     if (config) {
       fetchAccountData();
-      setRefreshCountdown(10);
 
-      // Set up countdown timer (updates every second)
-      const countdownInterval = setInterval(() => {
-        setRefreshCountdown((prev) => {
-          if (prev <= 1) {
-            return 10; // Reset to 10 when it reaches 0
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      // Set up auto-refresh for account data every 10 seconds
+      // Set up auto-refresh for account data every 30 seconds
       const accountInterval = setInterval(() => {
         fetchAccountData();
-        setRefreshCountdown(10); // Reset countdown when refresh happens
-      }, 10000);
+      }, 30000);
 
       return () => {
         clearInterval(accountInterval);
-        clearInterval(countdownInterval);
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -504,7 +429,6 @@ function App() {
           ),
         },
       }));
-      console.log('✅ Order cancelled successfully:', order.orderId);
     } catch (error) {
       console.error('❌ Error cancelling order:', error);
       // Optionally show error message to user
@@ -521,9 +445,6 @@ function App() {
       for (const order of accountData.orders) {
         try {
           await cancelOrder(accountData.account, order.orderId, order.symbol);
-          console.log(
-            `✅ Cancelled order ${order.orderId} for ${accountData.account.name}`,
-          );
         } catch (error) {
           console.error(`❌ Failed to cancel order ${order.orderId}:`, error);
         }
@@ -714,32 +635,6 @@ function App() {
                     <Dashboard sx={{ mr: 1 }} />
                     <Typography variant="h6">Portfolio Overview</Typography>
                   </Box>
-                  <IconButton
-                    size="medium"
-                    onClick={() => {
-                      fetchAccountData();
-                      setRefreshCountdown(10);
-                    }}
-                    sx={{ position: 'relative' }}
-                  >
-                    <Refresh sx={{ fontSize: 28 }} />
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        color: 'inherit',
-                        textShadow: '1px 1px 2px rgba(255,255,255,0.8)',
-                        lineHeight: 1,
-                      }}
-                    >
-                      {refreshCountdown}
-                    </Typography>
-                  </IconButton>
                 </Box>
 
                 {(() => {
@@ -890,35 +785,6 @@ function App() {
                     <Typography variant="h6">
                       {accountData.account.name} - Account Overview
                     </Typography>
-                    <IconButton
-                      size="medium"
-                      onClick={() => {
-                        fetchAccountData();
-                        setRefreshCountdown(10);
-                      }}
-                      disabled={accountData.loading}
-                      sx={{ position: 'relative' }}
-                    >
-                      <Refresh sx={{ fontSize: 28 }} />
-                      {!accountData.loading && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            position: 'absolute',
-                            top: '50%',
-                            left: '50%',
-                            transform: 'translate(-50%, -50%)',
-                            fontSize: '12px',
-                            fontWeight: 'bold',
-                            color: 'inherit',
-                            textShadow: '1px 1px 2px rgba(255,255,255,0.8)',
-                            lineHeight: 1,
-                          }}
-                        >
-                          {refreshCountdown}
-                        </Typography>
-                      )}
-                    </IconButton>
                   </Box>
 
                   <Grid container spacing={3}>

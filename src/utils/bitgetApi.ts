@@ -92,21 +92,9 @@ function generateSignature(
     normalizedQuery +
     normalizedBody;
 
-  console.log('🔏 Signature Debug:', {
-    timestamp,
-    method: normalizedMethod,
-    requestPath: normalizedPath,
-    queryString: normalizedQuery,
-    body: normalizedBody,
-    fullMessage: message,
-    messageLength: message.length,
-    secretKey: secretKey.substring(0, 10) + '...',
-  });
-
   const signature = CryptoJS.enc.Base64.stringify(
     CryptoJS.HmacSHA256(message, secretKey),
   );
-  console.log('🔏 Generated signature:', signature);
 
   return signature;
 }
@@ -137,22 +125,6 @@ function createHeaders(
     'Content-Type': 'application/json',
     locale: 'en-US',
   };
-
-  // Debug logging
-  console.log('🔐 API Request Debug:', {
-    accountId: account.id,
-    accountName: account.name,
-    method,
-    requestPath,
-    queryString,
-    timestamp,
-    apiKey: account.apiKey, // Show full API key for debugging
-    apiSecret: account.apiSecret.substring(0, 10) + '...',
-    passphrase: account.passphrase,
-    signature: signature.substring(0, 20) + '...',
-    fullSignature: signature, // Show full signature for debugging
-    signatureMessage: `${timestamp}${method.toUpperCase()}${requestPath}${queryString}${body}`,
-  });
 
   return headers;
 }
@@ -187,22 +159,11 @@ async function makeApiRequest<T>(
   );
 
   const fullUrl = baseUrl + requestPath + queryString;
-  console.log('📡 Making API request:', {
-    accountName: account.name,
-    fullUrl,
-    method,
-    requestBody,
-    headers: headers, // Show all headers for debugging
-    timestamp: new Date().toISOString(),
-  });
-
   const response = await fetch(fullUrl, {
     method,
     headers,
     body: method === 'POST' ? requestBody : undefined,
   });
-
-  console.log('📨 API Response:', { status: response.status, ok: response.ok });
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -221,10 +182,6 @@ async function makeApiRequest<T>(
   }
 
   const result = await response.json();
-  console.log('✅ API Success:', {
-    code: result.code,
-    dataLength: result.data?.length,
-  });
   return result;
 }
 
@@ -278,13 +235,11 @@ export async function getOrders(
     );
 
     if (response.code !== '00000') {
-      console.warn(`⚠️ Orders API Error for ${account.name}: ${response.msg}`);
       return []; // Return empty array if orders endpoint fails
     }
 
     return response.data;
-  } catch (error) {
-    console.warn(`⚠️ Orders API failed for ${account.name}:`, error);
+  } catch {
     return []; // Return empty array if orders endpoint fails
   }
 }
@@ -314,23 +269,4 @@ export async function cancelOrder(
   }
 
   return true;
-}
-
-// Get ticker price
-export async function getTickerPrice(
-  symbol: string,
-): Promise<{ symbol: string; lastPr: string }> {
-  const response = await fetch(`/api/mix/v1/market/ticker?symbol=${symbol}`);
-
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-
-  const result = await response.json();
-
-  if (result.code !== '00000') {
-    throw new Error(`API Error: ${result.msg}`);
-  }
-
-  return result.data;
 }
