@@ -10,7 +10,6 @@ export interface ConfigAccount {
 }
 
 export interface Config {
-  globalPassword: string;
   accounts: ConfigAccount[];
   settings: {
     apiBaseUrl: string;
@@ -24,46 +23,43 @@ export const loadConfig = async (): Promise<Config | null> => {
   try {
     const response = await fetch('/config.json');
     if (!response.ok) {
-      console.warn('Config file not found, using fallback configuration');
-      return getFallbackConfig();
+      console.error(
+        '❌ Config file not found at /config.json - status:',
+        response.status,
+      );
+      throw new Error(`Config file not found: ${response.status}`);
     }
     const config: Config = await response.json();
+    console.log('✅ Successfully loaded config:', {
+      accountCount: config.accounts.length,
+      enabledAccounts: config.accounts.filter((acc) => acc.enabled).length,
+    });
     return config;
   } catch (error) {
-    console.error('Error loading config:', error);
-    return getFallbackConfig();
+    console.error('❌ Error loading config:', error);
+    throw error; // Don't use fallback - fail instead
   }
 };
 
-// Fallback configuration when config.json is not available
-const getFallbackConfig = (): Config => ({
-  globalPassword: '',
-  accounts: [
-    {
-      id: '1',
-      name: 'Demo Account 1',
-      apiKey: 'demo-api-key-1',
-      apiSecret: 'demo-api-secret-1',
-      passphrase: 'demo-passphrase-1',
-      equity: 1250.75,
-      enabled: true,
-    },
-    {
-      id: '2',
-      name: 'Demo Account 2',
-      apiKey: 'demo-api-key-2',
-      apiSecret: 'demo-api-secret-2',
-      passphrase: 'demo-passphrase-2',
-      equity: 890.25,
-      enabled: true,
-    },
-  ],
-  settings: {
-    apiBaseUrl: 'https://api.bitget.com',
-    refreshInterval: 2000,
-    defaultSymbol: 'BTCUSD.P',
-  },
-});
+// Save configuration to localStorage as backup
+export const saveConfigToStorage = (config: Config): void => {
+  try {
+    localStorage.setItem('bitget-hedger-config', JSON.stringify(config));
+  } catch (error) {
+    console.error('Error saving config to localStorage:', error);
+  }
+};
+
+// Load configuration from localStorage as backup
+export const loadConfigFromStorage = (): Config | null => {
+  try {
+    const stored = localStorage.getItem('bitget-hedger-config');
+    return stored ? JSON.parse(stored) : null;
+  } catch (error) {
+    console.error('Error loading config from localStorage:', error);
+    return null;
+  }
+};
 
 // Save configuration back to config.json (for development purposes)
 export const saveConfig = async (config: Config): Promise<boolean> => {
@@ -76,19 +72,5 @@ export const saveConfig = async (config: Config): Promise<boolean> => {
   } catch (error) {
     console.error('Error saving config:', error);
     return false;
-  }
-};
-
-// Load from localStorage as fallback
-export const loadConfigFromStorage = (): Config | null => {
-  try {
-    const stored = localStorage.getItem('bitget-config');
-    if (stored) {
-      return JSON.parse(stored);
-    }
-    return null;
-  } catch (error) {
-    console.error('Error loading config from storage:', error);
-    return null;
   }
 };

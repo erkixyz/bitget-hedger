@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react';
 import { loadConfig, type Config } from './utils/config';
 import {
+  getAccountBalance,
+  getPositions,
+  getOrders,
+  cancelOrder,
+  type BitgetAccount,
+  type BitgetAccountBalance,
+  type BitgetPosition,
+  type BitgetOrder,
+} from './utils/bitgetApi';
+import {
   AppBar,
   Toolbar,
   Typography,
@@ -30,42 +40,7 @@ import {
   Schedule,
 } from '@mui/icons-material';
 
-// Interfaces for Bitget API responses
-interface AccountData {
-  marginCoin: string;
-  locked: string;
-  available: string;
-  equity: string;
-  usdtEquity: string;
-  unrealizedPL: string | null;
-  crossRiskRate: string;
-}
-
-interface Position {
-  symbol: string;
-  marginCoin: string;
-  holdSide: string;
-  total: string;
-  available: string;
-  averageOpenPrice: string;
-  unrealizedPL: string;
-  leverage: number;
-  marketPrice: string;
-}
-
-interface Order {
-  orderId: string;
-  symbol: string;
-  marginCoin: string;
-  size: string;
-  price: string;
-  side: string;
-  orderType: string;
-  state: string;
-  leverage: string;
-  cTime: string;
-  filledQty: string;
-}
+// Helper interfaces for UI components
 
 // Symbol icons (using simple colored circles for crypto symbols)
 const SymbolIcon = ({ symbol }: { symbol: string }) => {
@@ -138,11 +113,16 @@ function App() {
   const [config, setConfig] = useState<Config | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
 
-  // Bitget account data
-  const [accountData, setAccountData] = useState<AccountData | null>(null);
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  // Bitget account data (using first enabled account)
+  const [accountBalance, setAccountBalance] =
+    useState<BitgetAccountBalance | null>(null);
+  const [positions, setPositions] = useState<BitgetPosition[]>([]);
+  const [orders, setOrders] = useState<BitgetOrder[]>([]);
   const [accountLoading, setAccountLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [currentAccount, setCurrentAccount] = useState<BitgetAccount | null>(
+    null,
+  );
 
   const [accounts, setAccounts] = useState<Account[]>([]);
 
@@ -253,96 +233,50 @@ function App() {
 
   // Fetch account data from Bitget API
   const fetchAccountData = async () => {
-    setAccountLoading(true);
-    try {
-      // For demo purposes, using mock data that matches Bitget API structure
-      // In real implementation, this would make authenticated API calls
+    if (!config || config.accounts.length === 0) return;
 
-      // Mock account data based on Bitget API response format
-      const mockAccountData: AccountData = {
-        marginCoin: 'USDT',
-        locked: '150.25',
-        available: '2849.75',
-        equity: '3000.00',
-        usdtEquity: '3000.00',
-        unrealizedPL: '25.50',
-        crossRiskRate: '0.02',
+    // Use first enabled account
+    const firstAccount = config.accounts.find((acc) => acc.enabled);
+    if (!firstAccount) return;
+
+    setAccountLoading(true);
+    setApiError(null);
+
+    try {
+      const bitgetAccount: BitgetAccount = {
+        id: firstAccount.id,
+        name: firstAccount.name,
+        apiKey: firstAccount.apiKey,
+        apiSecret: firstAccount.apiSecret,
+        passphrase: firstAccount.passphrase,
+        enabled: firstAccount.enabled,
       };
 
-      // Mock positions data
-      const mockPositions: Position[] = [
-        {
-          symbol: 'BTCUSDT_UMCBL',
-          marginCoin: 'USDT',
-          holdSide: 'long',
-          total: '0.5',
-          available: '0.5',
-          averageOpenPrice: '65420.5',
-          unrealizedPL: '125.50',
-          leverage: 10,
-          marketPrice: '65671.0',
-        },
-        {
-          symbol: 'ETHUSDT_UMCBL',
-          marginCoin: 'USDT',
-          holdSide: 'short',
-          total: '2.0',
-          available: '2.0',
-          averageOpenPrice: '3820.25',
-          unrealizedPL: '-45.25',
-          leverage: 5,
-          marketPrice: '3797.50',
-        },
-      ];
+      setCurrentAccount(bitgetAccount);
 
-      // Mock orders data based on Bitget API response format
-      const mockOrders: Order[] = [
-        {
-          orderId: '1044911928892862465',
-          symbol: 'BTCUSDT_UMCBL',
-          marginCoin: 'USDT',
-          size: '0.1',
-          price: '64500.00',
-          side: 'open_long',
-          orderType: 'limit',
-          state: 'new',
-          leverage: '10',
-          cTime: '1693968404408',
-          filledQty: '0',
-        },
-        {
-          orderId: '1044911928892862466',
-          symbol: 'ETHUSDT_UMCBL',
-          marginCoin: 'USDT',
-          size: '1.0',
-          price: '3750.00',
-          side: 'open_short',
-          orderType: 'limit',
-          state: 'new',
-          leverage: '5',
-          cTime: '1693968504408',
-          filledQty: '0',
-        },
-        {
-          orderId: '1044911928892862467',
-          symbol: 'BTCUSDT_UMCBL',
-          marginCoin: 'USDT',
-          size: '0.05',
-          price: '66000.00',
-          side: 'close_long',
-          orderType: 'limit',
-          state: 'new',
-          leverage: '10',
-          cTime: '1693968604408',
-          filledQty: '0',
-        },
-      ];
+      // Fetch account balance
+      const balanceArray = await getAccountBalance(bitgetAccount);
+      const balance = balanceArray.length > 0 ? balanceArray[0] : null;
+      setAccountBalance(balance);
 
-      setAccountData(mockAccountData);
-      setPositions(mockPositions);
-      setOrders(mockOrders);
+      // Fetch positions
+      const positionsData = await getPositions(bitgetAccount);
+      setPositions(positionsData);
+
+      // Fetch orders
+      const ordersData = await getOrders(bitgetAccount);
+      setOrders(ordersData);
+
+      console.log(
+        `✅ Successfully loaded data for account: ${firstAccount.name}`,
+      );
     } catch (error) {
-      console.error('Error fetching account data:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      setApiError(errorMsg);
+      console.error(
+        `❌ Error fetching data for account ${firstAccount.name}:`,
+        errorMsg,
+      );
     } finally {
       setAccountLoading(false);
     }
@@ -368,20 +302,26 @@ function App() {
     initConfig();
   }, []);
 
-  // Load account data on component mount
+  // Load account data when config changes
   useEffect(() => {
-    fetchAccountData();
-  }, []);
+    if (config) {
+      fetchAccountData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config]);
 
   // Cancel order function
   const handleCancelOrder = async (orderId: string) => {
+    if (!currentAccount) return;
+
     try {
-      // In real implementation, this would make API call to cancel order
-      // For demo purposes, just remove from local state
+      await cancelOrder(currentAccount, orderId);
+      // Remove order from local state
       setOrders((prev) => prev.filter((order) => order.orderId !== orderId));
-      console.log('Order cancelled:', orderId);
+      console.log('✅ Order cancelled successfully:', orderId);
     } catch (error) {
-      console.error('Error cancelling order:', error);
+      console.error('❌ Error cancelling order:', error);
+      // Optionally show error message to user
     }
   };
 
@@ -573,15 +513,29 @@ function App() {
                       color="text.secondary"
                       sx={{ mb: 1 }}
                     >
-                      🔑 Global password:{' '}
+                      🔑 Account credentials:{' '}
                       <strong>
-                        {config.globalPassword ? '***configured***' : 'Not set'}
+                        {config.accounts.every(
+                          (acc) =>
+                            acc.apiKey && acc.apiSecret && acc.passphrase,
+                        )
+                          ? '***all configured***'
+                          : 'Missing credentials'}
                       </strong>
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       🔄 Refresh interval:{' '}
                       <strong>{config.settings.refreshInterval}ms</strong>
                     </Typography>
+                    {apiError && (
+                      <Typography
+                        variant="body2"
+                        color="error.main"
+                        sx={{ mt: 1, fontWeight: 'bold' }}
+                      >
+                        ❌ API Error: {apiError}
+                      </Typography>
+                    )}
                   </Box>
                 ) : (
                   <Typography variant="body2" color="text.secondary">
@@ -616,7 +570,7 @@ function App() {
                   </IconButton>
                 </Box>
 
-                {accountData ? (
+                {accountBalance ? (
                   <>
                     <Typography
                       variant="body2"
@@ -626,7 +580,7 @@ function App() {
                       Equity:{' '}
                       <strong>
                         $
-                        {parseFloat(accountData.equity).toLocaleString(
+                        {parseFloat(accountBalance.equity).toLocaleString(
                           'en-US',
                           { minimumFractionDigits: 2 },
                         )}
@@ -640,7 +594,7 @@ function App() {
                       Available:{' '}
                       <strong>
                         $
-                        {parseFloat(accountData.available).toLocaleString(
+                        {parseFloat(accountBalance.available).toLocaleString(
                           'en-US',
                           { minimumFractionDigits: 2 },
                         )}
@@ -654,17 +608,17 @@ function App() {
                       Locked:{' '}
                       <strong>
                         $
-                        {parseFloat(accountData.locked).toLocaleString(
+                        {parseFloat(accountBalance.locked).toLocaleString(
                           'en-US',
                           { minimumFractionDigits: 2 },
                         )}
                       </strong>
                     </Typography>
-                    {accountData.unrealizedPL && (
+                    {accountBalance.unrealizedPL && (
                       <Typography
                         variant="body2"
                         color={
-                          parseFloat(accountData.unrealizedPL) >= 0
+                          parseFloat(accountBalance.unrealizedPL) >= 0
                             ? 'success.main'
                             : 'error.main'
                         }
@@ -672,16 +626,16 @@ function App() {
                       >
                         Unrealized P&L:{' '}
                         <strong>
-                          ${parseFloat(accountData.unrealizedPL).toFixed(2)}
+                          ${parseFloat(accountBalance.unrealizedPL).toFixed(2)}
                         </strong>
                       </Typography>
                     )}
                     <Typography variant="body2" color="text.secondary">
                       Risk Rate:{' '}
                       <strong>
-                        {(parseFloat(accountData.crossRiskRate) * 100).toFixed(
-                          2,
-                        )}
+                        {(
+                          parseFloat(accountBalance.crossRiskRate) * 100
+                        ).toFixed(2)}
                         %
                       </strong>
                     </Typography>
@@ -873,7 +827,7 @@ function App() {
                                 variant="caption"
                                 color="text.secondary"
                               >
-                                {order.leverage}x leverage
+                                {order.orderType} order
                               </Typography>
                             </Box>
                             <IconButton
