@@ -124,7 +124,7 @@ function App() {
   // Refresh countdown timer
   const [refreshCountdown, setRefreshCountdown] = useState<number>(10);
 
-  // Fetch real-time price data using REST API
+  // Real-time price data using WebSocket
   useEffect(() => {
     const symbols = [
       { api: 'BTCUSDT_UMCBL', display: 'BTCUSD.P' },
@@ -132,60 +132,207 @@ function App() {
       { api: 'BNBUSDT_UMCBL', display: 'BNBUSDT.P' },
     ];
 
-    const fetchPrices = async () => {
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
+
+    const connectWebSocket = () => {
       try {
-        setWsConnected(true);
+        // Bitget WebSocket endpoint for futures market data
+        ws = new WebSocket('wss://ws.bitget.com/mix/v1/stream');
 
-        for (const symbol of symbols) {
-          try {
-            const response = await fetch(
-              `https://api.bitget.com/api/mix/v1/market/ticker?symbol=${symbol.api}`,
-            );
+        ws.onopen = () => {
+          console.log('✅ WebSocket connected');
+          setWsConnected(true);
 
-            if (response.ok) {
-              const data = await response.json();
+          // Get initial price data via REST API
+          const fetchInitialPrices = async () => {
+            console.log('🔄 Fetching initial prices via REST API...');
+            for (const symbol of symbols) {
+              try {
+                const response = await fetch(
+                  `https://api.bitget.com/api/mix/v1/market/ticker?symbol=${symbol.api}`,
+                );
 
-              if (data.code === '00000' && data.data) {
-                const ticker = data.data;
-                const price = parseFloat(ticker.last);
-                const change24h = parseFloat(ticker.priceChangePercent) * 100;
-                const volume24h = parseFloat(ticker.baseVolume || '0');
+                if (response.ok) {
+                  const data = await response.json();
+                  console.log(`📊 REST API response for ${symbol.api}:`, data);
 
-                setPriceData((prev) => ({
-                  ...prev,
-                  [symbol.display]: {
-                    symbol: symbol.display,
-                    price,
-                    change24h,
-                    volume24h,
-                    lastUpdate: Date.now(),
-                  },
-                }));
+                  if (data.code === '00000' && data.data) {
+                    const ticker = data.data;
+                    const price = parseFloat(ticker.last);
+                    const change24h =
+                      parseFloat(ticker.priceChangePercent) * 100;
+                    const volume24h = parseFloat(ticker.baseVolume || '0');
 
-                // Update current price if this is the selected symbol
-                if (symbol.display === selectedSymbol) {
-                  setCurrentPrice(price);
+                    console.log(
+                      `💰 Initial price: ${symbol.display} = $${price}`,
+                    );
+
+                    setPriceData((prev) => ({
+                      ...prev,
+                      [symbol.display]: {
+                        symbol: symbol.display,
+                        price,
+                        change24h,
+                        volume24h,
+                        lastUpdate: Date.now(),
+                      },
+                    }));
+
+                    if (symbol.display === selectedSymbol) {
+                      setCurrentPrice(price);
+                    }
+                  }
                 }
+              } catch (error) {
+                console.error(
+                  `❌ Error fetching initial ${symbol.display} price:`,
+                  error,
+                );
               }
             }
+          };
+
+          fetchInitialPrices();
+
+          // Subscribe to ticker channels for all symbols
+          const subscriptions = symbols.map((symbol) => ({
+            op: 'subscribe',
+            args: [
+              {
+                instType: 'UMCBL',
+                channel: 'ticker',
+                instId: symbol.api,
+              },
+            ],
+          }));
+
+          console.log('📡 Sending WebSocket subscriptions:', subscriptions);
+
+          subscriptions.forEach((sub) => {
+            console.log('📤 Subscribing to:', JSON.stringify(sub));
+            ws?.send(JSON.stringify(sub));
+          });
+
+          // Setup ping to keep connection alive
+          pingTimer = setInterval(() => {
+            if (ws?.readyState === WebSocket.OPEN) {
+              ws.send('ping');
+            }
+          }, 30000);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            if (event.data === 'pong') return; // Handle pong response
+
+            const data = JSON.parse(event.data);
+
+            // Debug: Log all WebSocket messages
+            console.log('📡 WebSocket message:', data);
+
+            if (data.arg && data.arg.channel === 'ticker' && data.data) {
+              const tickerData = data.data[0];
+              const instId = data.arg.instId;
+
+              console.log(`📊 Ticker data for ${instId}:`, tickerData);
+
+              // Find matching symbol
+              const symbolInfo = symbols.find((s) => s.api === instId);
+              if (!symbolInfo) {
+                console.warn(`⚠️ No matching symbol found for ${instId}`);
+                return;
+              }
+
+              const price = parseFloat(
+                tickerData.last || tickerData.lastPr || tickerData.lastPrice,
+              );
+              const change24h =
+                parseFloat(
+                  tickerData.change24h ||
+                    tickerData.chgUTC ||
+                    tickerData.changePercentage,
+                ) * 100;
+              const volume24h = parseFloat(
+                tickerData.baseVolume ||
+                  tickerData.volCcy24h ||
+                  tickerData.volume ||
+                  '0',
+              );
+
+              console.log(
+                `💰 Parsed price data: ${symbolInfo.display} = $${price}, change: ${change24h}%`,
+              );
+
+              setPriceData((prev) => ({
+                ...prev,
+                [symbolInfo.display]: {
+                  symbol: symbolInfo.display,
+                  price,
+                  change24h,
+                  volume24h,
+                  lastUpdate: Date.now(),
+                },
+              }));
+
+              // Update current price if this is the selected symbol
+              if (symbolInfo.display === selectedSymbol) {
+                setCurrentPrice(price);
+              }
+            } else {
+              // Log other message types
+              console.log('📝 Other WebSocket message type:', data);
+            }
           } catch (error) {
-            console.error(`Error fetching ${symbol.display} price:`, error);
+            console.error(
+              '❌ Error parsing WebSocket message:',
+              error,
+              event.data,
+            );
           }
-        }
+        };
+
+        ws.onclose = () => {
+          console.log('🔌 WebSocket disconnected');
+          setWsConnected(false);
+
+          if (pingTimer) {
+            clearInterval(pingTimer);
+            pingTimer = null;
+          }
+
+          // Attempt to reconnect after 5 seconds
+          reconnectTimer = setTimeout(() => {
+            console.log('🔄 Attempting to reconnect WebSocket...');
+            connectWebSocket();
+          }, 5000);
+        };
+
+        ws.onerror = (error) => {
+          console.error('❌ WebSocket error:', error);
+          setWsConnected(false);
+        };
       } catch (error) {
-        console.error('Error in price fetching:', error);
+        console.error('❌ Error creating WebSocket:', error);
         setWsConnected(false);
       }
     };
 
-    // Initial fetch
-    fetchPrices();
+    // Initial connection
+    connectWebSocket();
 
-    // Set up interval for regular updates (every 2 seconds)
-    const interval = setInterval(fetchPrices, 2000);
-
+    // Cleanup function
     return () => {
-      clearInterval(interval);
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+      if (pingTimer) {
+        clearInterval(pingTimer);
+      }
+      if (ws) {
+        ws.close();
+      }
     };
   }, [selectedSymbol]);
 
