@@ -568,15 +568,30 @@ function App() {
                     <Typography variant="h6">Portfolio Overview</Typography>
                   </Box>
                   <IconButton
-                    size="small"
-                    color="primary"
+                    size="medium"
                     onClick={() => {
                       fetchAccountData();
                       setRefreshCountdown(10);
                     }}
-                    title={`Refresh All (${refreshCountdown}s)`}
+                    sx={{ position: 'relative' }}
                   >
-                    <Refresh fontSize="small" />
+                    <Refresh sx={{ fontSize: 28 }} />
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        color: 'inherit',
+                        textShadow: '1px 1px 2px rgba(255,255,255,0.8)',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {refreshCountdown}
+                    </Typography>
                   </IconButton>
                 </Box>
 
