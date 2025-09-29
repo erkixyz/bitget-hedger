@@ -95,6 +95,11 @@ const getApiSymbol = (displaySymbol: string): string => {
   return symbolMap[displaySymbol] || displaySymbol;
 };
 
+// Helper function to format numbers with space thousand separators
+const formatNumber = (num: number, decimals: number = 2): string => {
+  return num.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+};
+
 function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSD.P');
   const [currentPrice, setCurrentPrice] = useState(0);
@@ -586,7 +591,7 @@ function App() {
                               variant="h5"
                               sx={{ fontWeight: 'bold' }}
                             >
-                              ${summary.totalBalance.toFixed(2)}
+                              ${formatNumber(summary.totalBalance)}
                             </Typography>
                             <Typography variant="body2">
                               Total Balance
@@ -607,7 +612,7 @@ function App() {
                               }}
                             >
                               {summary.totalPnL >= 0 ? '+' : ''}$
-                              {summary.totalPnL.toFixed(2)}
+                              {formatNumber(Math.abs(summary.totalPnL))}
                             </Typography>
                             <Box
                               sx={{
