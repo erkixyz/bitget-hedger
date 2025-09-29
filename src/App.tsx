@@ -17,7 +17,6 @@ import {
   Box,
   Card,
   CardContent,
-  Button,
   Grid,
   Paper,
   IconButton,
@@ -25,15 +24,12 @@ import {
   FormControl,
   Select,
   MenuItem,
-  Divider,
   Chip,
 } from '@mui/material';
 import {
   TrendingUp,
   TrendingDown,
   Settings,
-  Close,
-  CallSplit,
   AccountBalanceWallet,
   Refresh,
   Cancel,
@@ -78,23 +74,6 @@ const SymbolIcon = ({ symbol }: { symbol: string }) => {
   );
 };
 
-// Legacy interfaces for mock data - keeping for compatibility
-interface MockPosition {
-  id: string;
-  side: 'long' | 'short';
-  size: number;
-  entryPrice: number;
-  pnl: number;
-}
-
-interface Account {
-  id: string;
-  name: string;
-  apiKey: string;
-  equity: number;
-  positions: MockPosition[];
-}
-
 interface PriceData {
   symbol: string;
   price: number;
@@ -123,40 +102,6 @@ function App() {
   const [currentAccount, setCurrentAccount] = useState<BitgetAccount | null>(
     null,
   );
-
-  const [accounts, setAccounts] = useState<Account[]>([]);
-
-  // Update accounts when config is loaded
-  useEffect(() => {
-    if (config) {
-      const configAccounts: Account[] = config.accounts
-        .filter((acc) => acc.enabled)
-        .map((acc) => ({
-          id: acc.id,
-          name: acc.name,
-          apiKey: acc.apiKey,
-          equity: acc.equity,
-          positions: [
-            // Mock positions for demo - in real app these would come from API
-            {
-              id: `pos${acc.id}-1`,
-              side: 'long' as const,
-              size: 0.5,
-              entryPrice: 65420,
-              pnl: 125.5,
-            },
-            {
-              id: `pos${acc.id}-2`,
-              side: 'short' as const,
-              size: 0.2,
-              entryPrice: 65800,
-              pnl: -45.2,
-            },
-          ],
-        }));
-      setAccounts(configAccounts);
-    }
-  }, [config]);
 
   // Fetch real-time price data using REST API
   useEffect(() => {
@@ -330,36 +275,6 @@ function App() {
       console.error('❌ Error cancelling order:', error);
       // Optionally show error message to user
     }
-  };
-
-  const handleClosePosition = (accountId: string, positionId: string) => {
-    setAccounts((prev) =>
-      prev.map((account) =>
-        account.id === accountId
-          ? {
-              ...account,
-              positions: account.positions.filter(
-                (pos) => pos.id !== positionId,
-              ),
-            }
-          : account,
-      ),
-    );
-  };
-
-  const handlePartialClose = (accountId: string, positionId: string) => {
-    setAccounts((prev) =>
-      prev.map((account) =>
-        account.id === accountId
-          ? {
-              ...account,
-              positions: account.positions.map((pos) =>
-                pos.id === positionId ? { ...pos, size: pos.size / 2 } : pos,
-              ),
-            }
-          : account,
-      ),
-    );
   };
 
   return (
@@ -856,126 +771,6 @@ function App() {
                 )}
               </CardContent>
             </Card>
-          </Grid>
-
-          {/* Legacy Accounts Container */}
-          <Grid size={{ xs: 12 }}>
-            <Typography variant="h5" sx={{ mb: 3 }}>
-              Mock Accounts (Demo)
-            </Typography>
-            <Grid container spacing={2}>
-              {accounts.map((account) => (
-                <Grid key={account.id} size={{ xs: 12, md: 6 }}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" sx={{ mb: 2 }}>
-                        {account.name}
-                      </Typography>
-
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mb: 1 }}
-                      >
-                        Equity:{' '}
-                        <strong>
-                          $
-                          {account.equity.toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                          })}
-                        </strong>
-                      </Typography>
-
-                      <Divider sx={{ my: 2 }} />
-
-                      <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                        Positions ({account.positions.length})
-                      </Typography>
-
-                      {account.positions.length === 0 ? (
-                        <Typography variant="body2" color="text.secondary">
-                          No open positions
-                        </Typography>
-                      ) : (
-                        account.positions.map((position) => (
-                          <Paper
-                            key={position.id}
-                            sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}
-                          >
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'flex-start',
-                                mb: 1,
-                              }}
-                            >
-                              <Box>
-                                <Chip
-                                  label={position.side.toUpperCase()}
-                                  size="small"
-                                  color={
-                                    position.side === 'long'
-                                      ? 'success'
-                                      : 'error'
-                                  }
-                                  sx={{ mb: 1 }}
-                                />
-                                <Typography variant="body2">
-                                  Size: {position.size} | Entry: $
-                                  {position.entryPrice.toLocaleString()}
-                                </Typography>
-                                <Typography
-                                  variant="body2"
-                                  color={
-                                    position.pnl >= 0
-                                      ? 'success.main'
-                                      : 'error.main'
-                                  }
-                                  sx={{ fontWeight: 'bold' }}
-                                >
-                                  PnL: ${position.pnl.toFixed(2)}
-                                </Typography>
-                              </Box>
-
-                              <Box
-                                sx={{
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: 1,
-                                }}
-                              >
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  color="error"
-                                  onClick={() =>
-                                    handleClosePosition(account.id, position.id)
-                                  }
-                                  startIcon={<Close />}
-                                >
-                                  Close
-                                </Button>
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  onClick={() =>
-                                    handlePartialClose(account.id, position.id)
-                                  }
-                                  startIcon={<CallSplit />}
-                                >
-                                  Partial
-                                </Button>
-                              </Box>
-                            </Box>
-                          </Paper>
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
           </Grid>
         </Grid>
       </Container>
