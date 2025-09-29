@@ -103,6 +103,9 @@ function App() {
     null,
   );
 
+  // Refresh countdown timer
+  const [refreshCountdown, setRefreshCountdown] = useState<number>(10);
+
   // Fetch real-time price data using REST API
   useEffect(() => {
     const symbols = [
@@ -251,12 +254,27 @@ function App() {
   useEffect(() => {
     if (config) {
       fetchAccountData();
+      setRefreshCountdown(10);
+
+      // Set up countdown timer (updates every second)
+      const countdownInterval = setInterval(() => {
+        setRefreshCountdown((prev) => {
+          if (prev <= 1) {
+            return 10; // Reset to 10 when it reaches 0
+          }
+          return prev - 1;
+        });
+      }, 1000);
 
       // Set up auto-refresh for account data every 10 seconds
-      const accountInterval = setInterval(fetchAccountData, 10000);
+      const accountInterval = setInterval(() => {
+        fetchAccountData();
+        setRefreshCountdown(10); // Reset countdown when refresh happens
+      }, 10000);
 
       return () => {
         clearInterval(accountInterval);
+        clearInterval(countdownInterval);
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -484,11 +502,33 @@ function App() {
                 >
                   <Typography variant="h6">Account Overview</Typography>
                   <IconButton
-                    size="small"
-                    onClick={fetchAccountData}
+                    size="medium"
+                    onClick={() => {
+                      fetchAccountData();
+                      setRefreshCountdown(10); // Reset countdown on manual refresh
+                    }}
                     disabled={accountLoading}
+                    sx={{ position: 'relative' }}
                   >
-                    <Refresh />
+                    <Refresh sx={{ fontSize: 28 }} />
+                    {!accountLoading && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          color: 'inherit',
+                          textShadow: '1px 1px 2px rgba(255,255,255,0.8)',
+                          lineHeight: 1,
+                        }}
+                      >
+                        {refreshCountdown}
+                      </Typography>
+                    )}
                   </IconButton>
                 </Box>
 
