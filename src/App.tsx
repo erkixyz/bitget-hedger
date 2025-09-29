@@ -25,6 +25,8 @@ import {
   Select,
   MenuItem,
   Chip,
+  Button,
+  Divider,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -34,6 +36,9 @@ import {
   Refresh,
   Cancel,
   Schedule,
+  Close,
+  Clear,
+  Dashboard,
 } from '@mui/icons-material';
 
 // Helper interfaces for UI components
@@ -356,6 +361,75 @@ function App() {
     }
   };
 
+  // Batch cancel all orders for all accounts
+  const handleCancelAllOrders = async () => {
+    const enabledAccounts = Object.values(accountsData).filter(
+      (data) => data.account.enabled,
+    );
+
+    for (const accountData of enabledAccounts) {
+      for (const order of accountData.orders) {
+        try {
+          await cancelOrder(accountData.account, order.orderId, order.symbol);
+          console.log(
+            `✅ Cancelled order ${order.orderId} for ${accountData.account.name}`,
+          );
+        } catch (error) {
+          console.error(`❌ Failed to cancel order ${order.orderId}:`, error);
+        }
+      }
+    }
+
+    // Refresh data after batch cancel
+    fetchAccountData();
+  };
+
+  // Calculate summary data across all accounts
+  const getSummaryData = () => {
+    const enabledAccounts = Object.values(accountsData).filter(
+      (data) => data.account.enabled,
+    );
+
+    let totalBalance = 0;
+    let totalPnL = 0;
+    let totalPositions = 0;
+    let totalOrders = 0;
+    let totalLongPositions = 0;
+    let totalShortPositions = 0;
+
+    enabledAccounts.forEach((accountData) => {
+      // Balance
+      if (accountData.balance) {
+        totalBalance += parseFloat(accountData.balance.usdtEquity || '0');
+      }
+
+      // Positions
+      accountData.positions.forEach((position) => {
+        totalPositions++;
+        totalPnL += parseFloat(position.unrealizedPL || '0');
+
+        if (position.holdSide === 'long') {
+          totalLongPositions++;
+        } else {
+          totalShortPositions++;
+        }
+      });
+
+      // Orders
+      totalOrders += accountData.orders.length;
+    });
+
+    return {
+      totalBalance,
+      totalPnL,
+      totalPositions,
+      totalOrders,
+      totalLongPositions,
+      totalShortPositions,
+      accountsCount: enabledAccounts.length,
+    };
+  };
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="static">
@@ -470,6 +544,128 @@ function App() {
                     </Typography>
                   </Box>
                 )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Overall Summary Block */}
+          <Grid size={{ xs: 12 }}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Dashboard sx={{ mr: 1 }} />
+                  <Typography variant="h6">Portfolio Overview</Typography>
+                </Box>
+
+                {(() => {
+                  const summary = getSummaryData();
+                  return (
+                    <>
+                      <Grid container spacing={3}>
+                        <Grid size={{ xs: 6, md: 3 }}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography
+                              variant="h5"
+                              sx={{ fontWeight: 'bold' }}
+                            >
+                              ${summary.totalBalance.toFixed(2)}
+                            </Typography>
+                            <Typography variant="body2">
+                              Total Balance
+                            </Typography>
+                          </Box>
+                        </Grid>
+
+                        <Grid size={{ xs: 6, md: 3 }}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography
+                              variant="h5"
+                              sx={{
+                                fontWeight: 'bold',
+                                color:
+                                  summary.totalPnL >= 0 ? '#4caf50' : '#f44336',
+                              }}
+                            >
+                              {summary.totalPnL >= 0 ? '+' : ''}$
+                              {summary.totalPnL.toFixed(2)}
+                            </Typography>
+                            <Typography variant="body2">Total P&L</Typography>
+                          </Box>
+                        </Grid>
+
+                        <Grid size={{ xs: 6, md: 3 }}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography
+                              variant="h5"
+                              sx={{ fontWeight: 'bold' }}
+                            >
+                              {summary.totalPositions}
+                            </Typography>
+                            <Typography variant="body2">
+                              Positions ({summary.totalLongPositions}L/
+                              {summary.totalShortPositions}S)
+                            </Typography>
+                          </Box>
+                        </Grid>
+
+                        <Grid size={{ xs: 6, md: 3 }}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography
+                              variant="h5"
+                              sx={{ fontWeight: 'bold' }}
+                            >
+                              {summary.totalOrders}
+                            </Typography>
+                            <Typography variant="body2">Open Orders</Typography>
+                          </Box>
+                        </Grid>
+                      </Grid>
+
+                      <Divider sx={{ my: 2 }} />
+
+                      {/* Batch Actions */}
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          gap: 2,
+                          justifyContent: 'center',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Button
+                          variant="outlined"
+                          color="primary"
+                          startIcon={<Refresh />}
+                          onClick={() => {
+                            fetchAccountData();
+                            setRefreshCountdown(10);
+                          }}
+                        >
+                          Refresh All ({refreshCountdown}s)
+                        </Button>
+
+                        <Button
+                          variant="outlined"
+                          color="warning"
+                          startIcon={<Clear />}
+                          onClick={handleCancelAllOrders}
+                          disabled={summary.totalOrders === 0}
+                        >
+                          Cancel All Orders ({summary.totalOrders})
+                        </Button>
+
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          startIcon={<Close />}
+                          disabled={summary.totalPositions === 0}
+                        >
+                          Close All Positions ({summary.totalPositions})
+                        </Button>
+                      </Box>
+                    </>
+                  );
+                })()}
               </CardContent>
             </Card>
           </Grid>
