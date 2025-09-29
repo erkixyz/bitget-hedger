@@ -622,80 +622,91 @@ function App() {
                   <Typography variant="h6">Open Positions</Typography>
                 </Box>
 
-                {positions.length > 0 ? (
-                  <>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 2 }}
-                    >
-                      Total Positions: <strong>{positions.length}</strong>
-                    </Typography>
-                    {positions.map((position, index) => (
-                      <Paper
-                        key={index}
-                        sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}
+                {(() => {
+                  // Filter out empty positions (where total is 0 or empty)
+                  const activePositions = positions.filter(
+                    (position) =>
+                      position.total && parseFloat(position.total) !== 0,
+                  );
+
+                  return activePositions.length > 0 ? (
+                    <>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mb: 2 }}
                       >
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
+                        Total Positions:{' '}
+                        <strong>{activePositions.length}</strong>
+                      </Typography>
+                      {activePositions.map((position, index) => (
+                        <Paper
+                          key={index}
+                          sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}
                         >
-                          <Box>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: 'bold' }}
-                            >
-                              {position.symbol.replace('_UMCBL', '')}
-                            </Typography>
-                            <Chip
-                              label={position.holdSide.toUpperCase()}
-                              color={
-                                position.holdSide === 'long'
-                                  ? 'success'
-                                  : 'error'
-                              }
-                              size="small"
-                              sx={{ mr: 1 }}
-                            />
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              Size: {position.total} | Avg: $
-                              {parseFloat(position.averageOpenPrice).toFixed(2)}
-                            </Typography>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Box>
+                              <Typography
+                                variant="body2"
+                                sx={{ fontWeight: 'bold' }}
+                              >
+                                {position.symbol.replace('_UMCBL', '')}
+                              </Typography>
+                              <Chip
+                                label={position.holdSide.toUpperCase()}
+                                color={
+                                  position.holdSide === 'long'
+                                    ? 'success'
+                                    : 'error'
+                                }
+                                size="small"
+                                sx={{ mr: 1 }}
+                              />
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                Size: {position.total} | Avg: $
+                                {parseFloat(position.averageOpenPrice).toFixed(
+                                  2,
+                                )}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ textAlign: 'right' }}>
+                              <Typography
+                                variant="body2"
+                                color={
+                                  parseFloat(position.unrealizedPL) >= 0
+                                    ? 'success.main'
+                                    : 'error.main'
+                                }
+                                sx={{ fontWeight: 'bold' }}
+                              >
+                                ${parseFloat(position.unrealizedPL).toFixed(2)}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {position.leverage}x
+                              </Typography>
+                            </Box>
                           </Box>
-                          <Box sx={{ textAlign: 'right' }}>
-                            <Typography
-                              variant="body2"
-                              color={
-                                parseFloat(position.unrealizedPL) >= 0
-                                  ? 'success.main'
-                                  : 'error.main'
-                              }
-                              sx={{ fontWeight: 'bold' }}
-                            >
-                              ${parseFloat(position.unrealizedPL).toFixed(2)}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {position.leverage}x
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Paper>
-                    ))}
-                  </>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    No open positions
-                  </Typography>
-                )}
+                        </Paper>
+                      ))}
+                    </>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No open positions
+                    </Typography>
+                  );
+                })()}
               </CardContent>
             </Card>
           </Grid>
