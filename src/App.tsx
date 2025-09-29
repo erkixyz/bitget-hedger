@@ -28,6 +28,8 @@ import {
   VisibilityOff,
   AccountBalanceWallet,
   Refresh,
+  Cancel,
+  Schedule,
 } from '@mui/icons-material';
 
 // Interfaces for Bitget API responses
@@ -51,6 +53,20 @@ interface Position {
   unrealizedPL: string;
   leverage: number;
   marketPrice: string;
+}
+
+interface Order {
+  orderId: string;
+  symbol: string;
+  marginCoin: string;
+  size: string;
+  price: string;
+  side: string;
+  orderType: string;
+  state: string;
+  leverage: string;
+  cTime: string;
+  filledQty: string;
 }
 
 // Symbol icons (using simple colored circles for crypto symbols)
@@ -125,6 +141,7 @@ function App() {
   // Bitget account data
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [accountLoading, setAccountLoading] = useState(false);
 
   const [accounts, setAccounts] = useState<Account[]>([
@@ -266,8 +283,52 @@ function App() {
         },
       ];
 
+      // Mock orders data based on Bitget API response format
+      const mockOrders: Order[] = [
+        {
+          orderId: '1044911928892862465',
+          symbol: 'BTCUSDT_UMCBL',
+          marginCoin: 'USDT',
+          size: '0.1',
+          price: '64500.00',
+          side: 'open_long',
+          orderType: 'limit',
+          state: 'new',
+          leverage: '10',
+          cTime: '1693968404408',
+          filledQty: '0',
+        },
+        {
+          orderId: '1044911928892862466',
+          symbol: 'ETHUSDT_UMCBL',
+          marginCoin: 'USDT',
+          size: '1.0',
+          price: '3750.00',
+          side: 'open_short',
+          orderType: 'limit',
+          state: 'new',
+          leverage: '5',
+          cTime: '1693968504408',
+          filledQty: '0',
+        },
+        {
+          orderId: '1044911928892862467',
+          symbol: 'BTCUSDT_UMCBL',
+          marginCoin: 'USDT',
+          size: '0.05',
+          price: '66000.00',
+          side: 'close_long',
+          orderType: 'limit',
+          state: 'new',
+          leverage: '10',
+          cTime: '1693968604408',
+          filledQty: '0',
+        },
+      ];
+
       setAccountData(mockAccountData);
       setPositions(mockPositions);
+      setOrders(mockOrders);
     } catch (error) {
       console.error('Error fetching account data:', error);
     } finally {
@@ -279,6 +340,18 @@ function App() {
   useEffect(() => {
     fetchAccountData();
   }, []);
+
+  // Cancel order function
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      // In real implementation, this would make API call to cancel order
+      // For demo purposes, just remove from local state
+      setOrders((prev) => prev.filter((order) => order.orderId !== orderId));
+      console.log('Order cancelled:', orderId);
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+    }
+  };
 
   const handleClosePosition = (accountId: string, positionId: string) => {
     setAccounts((prev) =>
@@ -637,6 +710,119 @@ function App() {
                 ) : (
                   <Typography variant="body2" color="text.secondary">
                     No open positions
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Open Orders */}
+          <Grid size={{ xs: 12 }}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Schedule sx={{ mr: 1 }} />
+                  <Typography variant="h6">Open Orders</Typography>
+                </Box>
+
+                {orders.length > 0 ? (
+                  <>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 2 }}
+                    >
+                      Active Orders: <strong>{orders.length}</strong>
+                    </Typography>
+                    {orders.map((order, index) => (
+                      <Paper
+                        key={index}
+                        sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}
+                      >
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Box>
+                            <Typography
+                              variant="body2"
+                              sx={{ fontWeight: 'bold' }}
+                            >
+                              {order.symbol.replace('_UMCBL', '')} •{' '}
+                              {order.orderType.toUpperCase()}
+                            </Typography>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                                mt: 0.5,
+                              }}
+                            >
+                              <Chip
+                                label={order.side
+                                  .replace('_', ' ')
+                                  .toUpperCase()}
+                                color={
+                                  order.side.includes('long')
+                                    ? 'success'
+                                    : 'error'
+                                }
+                                size="small"
+                              />
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                Size: {order.size} @ $
+                                {parseFloat(order.price).toFixed(2)}
+                              </Typography>
+                            </Box>
+                          </Box>
+                          <Box
+                            sx={{
+                              textAlign: 'right',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                            }}
+                          >
+                            <Box>
+                              <Typography
+                                variant="body2"
+                                sx={{ fontWeight: 'bold' }}
+                              >
+                                $
+                                {(
+                                  parseFloat(order.size) *
+                                  parseFloat(order.price)
+                                ).toFixed(2)}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {order.leverage}x leverage
+                              </Typography>
+                            </Box>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleCancelOrder(order.orderId)}
+                            >
+                              <Cancel fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        </Box>
+                      </Paper>
+                    ))}
+                  </>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No open orders
                   </Typography>
                 )}
               </CardContent>
