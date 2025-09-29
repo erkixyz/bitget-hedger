@@ -82,6 +82,16 @@ interface PriceData {
   lastUpdate: number;
 }
 
+// Helper function to convert display symbols to API symbols
+const getApiSymbol = (displaySymbol: string): string => {
+  const symbolMap: { [key: string]: string } = {
+    'BTCUSD.P': 'BTCUSDT_UMCBL',
+    'ETHUSD.P': 'ETHUSDT_UMCBL',
+    'BNBUSDT.P': 'BNBUSDT_UMCBL',
+  };
+  return symbolMap[displaySymbol] || displaySymbol;
+};
+
 function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSD.P');
   const [currentPrice, setCurrentPrice] = useState(0);
@@ -636,7 +646,7 @@ function App() {
                         color="text.secondary"
                         sx={{ mb: 2 }}
                       >
-                        Total Positions:{' '}
+                        Positions for {selectedSymbol}:{' '}
                         <strong>{activePositions.length}</strong>
                       </Typography>
                       {activePositions.map((position, index) => (
@@ -703,7 +713,7 @@ function App() {
                     </>
                   ) : (
                     <Typography variant="body2" color="text.secondary">
-                      No open positions
+                      No open positions for {selectedSymbol}
                     </Typography>
                   );
                 })()}
@@ -720,69 +730,33 @@ function App() {
                   <Typography variant="h6">Open Orders</Typography>
                 </Box>
 
-                {orders.length > 0 ? (
-                  <>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 2 }}
-                    >
-                      Active Orders: <strong>{orders.length}</strong>
-                    </Typography>
-                    {orders.map((order, index) => (
-                      <Paper
-                        key={index}
-                        sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}
+                {(() => {
+                  // Filter orders by selected symbol
+                  const selectedApiSymbol = getApiSymbol(selectedSymbol);
+                  const filteredOrders = orders.filter(
+                    (order) => order.symbol === selectedApiSymbol,
+                  );
+
+                  return filteredOrders.length > 0 ? (
+                    <>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mb: 2 }}
                       >
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
+                        Active Orders for {selectedSymbol}:{' '}
+                        <strong>{filteredOrders.length}</strong>
+                      </Typography>
+                      {filteredOrders.map((order, index) => (
+                        <Paper
+                          key={index}
+                          sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}
                         >
-                          <Box>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: 'bold' }}
-                            >
-                              {order.symbol.replace('_UMCBL', '')} •{' '}
-                              {order.orderType.toUpperCase()}
-                            </Typography>
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                                mt: 0.5,
-                              }}
-                            >
-                              <Chip
-                                label={order.side
-                                  .replace('_', ' ')
-                                  .toUpperCase()}
-                                color={
-                                  order.side.includes('long')
-                                    ? 'success'
-                                    : 'error'
-                                }
-                                size="small"
-                              />
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                Size: {order.size} @ $
-                                {parseFloat(order.price).toFixed(2)}
-                              </Typography>
-                            </Box>
-                          </Box>
                           <Box
                             sx={{
-                              textAlign: 'right',
                               display: 'flex',
+                              justifyContent: 'space-between',
                               alignItems: 'center',
-                              gap: 1,
                             }}
                           >
                             <Box>
@@ -790,36 +764,81 @@ function App() {
                                 variant="body2"
                                 sx={{ fontWeight: 'bold' }}
                               >
-                                $
-                                {(
-                                  parseFloat(order.size) *
-                                  parseFloat(order.price)
-                                ).toFixed(2)}
+                                {order.symbol.replace('_UMCBL', '')} •{' '}
+                                {order.orderType.toUpperCase()}
                               </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1,
+                                  mt: 0.5,
+                                }}
                               >
-                                {order.orderType} order
-                              </Typography>
+                                <Chip
+                                  label={order.side
+                                    .replace('_', ' ')
+                                    .toUpperCase()}
+                                  color={
+                                    order.side.includes('long')
+                                      ? 'success'
+                                      : 'error'
+                                  }
+                                  size="small"
+                                />
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  Size: {order.size} @ $
+                                  {parseFloat(order.price).toFixed(2)}
+                                </Typography>
+                              </Box>
                             </Box>
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleCancelOrder(order)}
+                            <Box
+                              sx={{
+                                textAlign: 'right',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                              }}
                             >
-                              <Cancel fontSize="small" />
-                            </IconButton>
+                              <Box>
+                                <Typography
+                                  variant="body2"
+                                  sx={{ fontWeight: 'bold' }}
+                                >
+                                  $
+                                  {(
+                                    parseFloat(order.size) *
+                                    parseFloat(order.price)
+                                  ).toFixed(2)}
+                                </Typography>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  {order.orderType} order
+                                </Typography>
+                              </Box>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleCancelOrder(order)}
+                              >
+                                <Cancel fontSize="small" />
+                              </IconButton>
+                            </Box>
                           </Box>
-                        </Box>
-                      </Paper>
-                    ))}
-                  </>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    No open orders
-                  </Typography>
-                )}
+                        </Paper>
+                      ))}
+                    </>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No open orders for {selectedSymbol}
+                    </Typography>
+                  );
+                })()}
               </CardContent>
             </Card>
           </Grid>
