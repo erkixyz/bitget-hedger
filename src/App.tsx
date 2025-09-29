@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import {
   TrendingUp,
+  TrendingDown,
   Settings,
   Close,
   CallSplit,
@@ -79,9 +80,19 @@ interface Account {
   positions: Position[];
 }
 
+interface PriceData {
+  symbol: string;
+  price: number;
+  change24h: number;
+  volume24h: number;
+  lastUpdate: number;
+}
+
 function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSD.P');
   const [currentPrice, setCurrentPrice] = useState(0);
+  const [priceData, setPriceData] = useState<{ [key: string]: PriceData }>({});
+  const [wsConnected, setWsConnected] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([
@@ -106,23 +117,78 @@ function App() {
     },
   ]);
 
-  // Simulate price updates
+  // Fetch real-time price data using REST API
   useEffect(() => {
-    const prices = {
-      'BTCUSD.P': 65487.25,
-      'ETHUSD.P': 2634.18,
-      'BNBUSDT.P': 584.95,
+    const symbols = [
+      { api: 'BTCUSDT_UMCBL', display: 'BTCUSD.P' },
+      { api: 'ETHUSDT_UMCBL', display: 'ETHUSD.P' },
+      { api: 'BNBUSDT_UMCBL', display: 'BNBUSDT.P' },
+    ];
+
+    const fetchPrices = async () => {
+      try {
+        setWsConnected(true);
+
+        for (const symbol of symbols) {
+          try {
+            const response = await fetch(
+              `https://api.bitget.com/api/mix/v1/market/ticker?symbol=${symbol.api}`,
+            );
+
+            if (response.ok) {
+              const data = await response.json();
+
+              if (data.code === '00000' && data.data) {
+                const ticker = data.data;
+                const price = parseFloat(ticker.last);
+                const change24h = parseFloat(ticker.priceChangePercent) * 100;
+                const volume24h = parseFloat(ticker.baseVolume || '0');
+
+                setPriceData((prev) => ({
+                  ...prev,
+                  [symbol.display]: {
+                    symbol: symbol.display,
+                    price,
+                    change24h,
+                    volume24h,
+                    lastUpdate: Date.now(),
+                  },
+                }));
+
+                // Update current price if this is the selected symbol
+                if (symbol.display === selectedSymbol) {
+                  setCurrentPrice(price);
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`Error fetching ${symbol.display} price:`, error);
+          }
+        }
+      } catch (error) {
+        console.error('Error in price fetching:', error);
+        setWsConnected(false);
+      }
     };
-    setCurrentPrice(prices[selectedSymbol as keyof typeof prices]);
 
-    const interval = setInterval(() => {
-      const basePrice = prices[selectedSymbol as keyof typeof prices];
-      const variation = (Math.random() - 0.5) * 0.02; // ±1% variation
-      setCurrentPrice(basePrice * (1 + variation));
-    }, 2000);
+    // Initial fetch
+    fetchPrices();
 
-    return () => clearInterval(interval);
+    // Set up interval for regular updates (every 2 seconds)
+    const interval = setInterval(fetchPrices, 2000);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, [selectedSymbol]);
+
+  // Update current price when symbol changes
+  useEffect(() => {
+    const symbolPriceData = priceData[selectedSymbol];
+    if (symbolPriceData) {
+      setCurrentPrice(symbolPriceData.price);
+    }
+  }, [selectedSymbol, priceData]);
 
   const handleClosePosition = (accountId: string, positionId: string) => {
     setAccounts((prev) =>
@@ -213,10 +279,22 @@ function App() {
           <Grid size={{ xs: 12, md: 6 }}>
             <Card>
               <CardContent>
-                <Typography variant="h6" sx={{ mb: 2 }}>
-                  Current Price
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 2,
+                  }}
+                >
+                  <Typography variant="h6">Current Price</Typography>
+                  <Chip
+                    label={wsConnected ? 'LIVE' : 'OFFLINE'}
+                    color={wsConnected ? 'success' : 'error'}
+                    size="small"
+                  />
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <SymbolIcon symbol={selectedSymbol} />
                   <Typography variant="h4" color="primary">
                     $
@@ -226,6 +304,34 @@ function App() {
                     })}
                   </Typography>
                 </Box>
+                {priceData[selectedSymbol] && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                    <Chip
+                      label={`${
+                        priceData[selectedSymbol].change24h >= 0 ? '+' : ''
+                      }${priceData[selectedSymbol].change24h.toFixed(2)}%`}
+                      color={
+                        priceData[selectedSymbol].change24h >= 0
+                          ? 'success'
+                          : 'error'
+                      }
+                      size="small"
+                      icon={
+                        priceData[selectedSymbol].change24h >= 0 ? (
+                          <TrendingUp />
+                        ) : (
+                          <TrendingDown />
+                        )
+                      }
+                    />
+                    <Typography
+                      variant="caption"
+                      sx={{ ml: 2, color: 'text.secondary' }}
+                    >
+                      24h Change
+                    </Typography>
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Grid>
